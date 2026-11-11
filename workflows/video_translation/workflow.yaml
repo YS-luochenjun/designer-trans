@@ -1,0 +1,13 @@
+id: video_translation
+version: 1.0.0
+nodes:
+  - {id: prepare, label: 准备媒体, stage: intake, scope: source, depends_on: []}
+  - {id: transcribe, label: 识别人声, stage: observe, scope: source, depends_on: [prepare]}
+  - {id: observe, label: 理解原片, stage: observe, scope: source, depends_on: [prepare, transcribe]}
+  - {id: translate, label: 翻译定稿, stage: translate, scope: locale, depends_on: [observe]}
+  - {id: plan, label: 制作规划, stage: plan, scope: locale, depends_on: [translate]}
+  - {id: visual, label: 画面制作, stage: produce, scope: locale, depends_on: [prepare, observe, translate, plan]}
+  - {id: audio, label: 声音制作, stage: produce, scope: locale, depends_on: [prepare, observe, translate, plan]}
+  - {id: compose, label: 合成候选, stage: compose, scope: locale, depends_on: [visual, audio]}
+  - {id: review, label: 成片审核, stage: review, scope: locale, depends_on: [compose]}
+  - {id: deliver, label: 本地交付, stage: deliver, scope: locale, depends_on: [review]}

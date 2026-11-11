@@ -1,0 +1,170 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "max_kie_credits": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Kie Credits"
+    },
+    "max_paid_calls": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Paid Calls"
+    },
+    "max_video_credits": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Video Credits"
+    },
+    "max_image_calls": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Image Calls"
+    },
+    "max_visual_steps": {
+      "anyOf": [
+        {
+          "minimum": 4,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Visual Steps"
+    },
+    "title": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "asset_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Asset Ids",
+      "type": "array"
+    },
+    "target_locales": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Target Locales",
+      "type": "array"
+    },
+    "source_language": {
+      "anyOf": [
+        {
+          "maxLength": 35,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Language"
+    },
+    "notes": {
+      "default": "",
+      "maxLength": 8000,
+      "title": "Notes",
+      "type": "string"
+    },
+    "confirm_brief": {
+      "default": false,
+      "title": "Confirm Brief",
+      "type": "boolean"
+    },
+    "profile": {
+      "const": "default",
+      "default": "default",
+      "title": "Profile",
+      "type": "string"
+    },
+    "max_revisions": {
+      "default": 1,
+      "maximum": 3,
+      "minimum": 0,
+      "title": "Max Revisions",
+      "type": "integer"
+    },
+    "visual_route": {
+      "default": "agent_adaptive",
+      "enum": [
+        "agent_adaptive",
+        "solid_overlay",
+        "wan_video_edit"
+      ],
+      "title": "Visual Route",
+      "type": "string"
+    },
+    "audio_strategy": {
+      "default": "preserve_background",
+      "enum": [
+        "preserve_background",
+        "replace_all_audio"
+      ],
+      "title": "Audio Strategy",
+      "type": "string"
+    },
+    "allow_review_draft": {
+      "default": false,
+      "title": "Allow Review Draft",
+      "type": "boolean"
+    },
+    "execution_profile": {
+      "const": "efficient_v1",
+      "default": "efficient_v1",
+      "title": "Execution Profile",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "asset_ids",
+    "target_locales"
+  ],
+  "title": "TaskCreate",
+  "type": "object",
+  "$id": "urn:video-translation:tasks/task-create:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

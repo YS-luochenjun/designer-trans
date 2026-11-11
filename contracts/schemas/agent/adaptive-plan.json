@@ -1,0 +1,232 @@
+{
+  "$defs": {
+    "LetterStyle": {
+      "additionalProperties": false,
+      "properties": {
+        "font_id": {
+          "default": "default",
+          "maxLength": 120,
+          "title": "Font Id",
+          "type": "string"
+        },
+        "font_size": {
+          "maximum": 400,
+          "minimum": 8,
+          "title": "Font Size",
+          "type": "integer"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "outline_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Outline Color",
+          "type": "string"
+        },
+        "outline_width": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Outline Width",
+          "type": "integer"
+        },
+        "shadow_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Shadow Color",
+          "type": "string"
+        },
+        "shadow_x": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow X",
+          "type": "integer"
+        },
+        "shadow_y": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow Y",
+          "type": "integer"
+        },
+        "align": {
+          "default": "center",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Align",
+          "type": "string"
+        }
+      },
+      "required": [
+        "font_size",
+        "color"
+      ],
+      "title": "LetterStyle",
+      "type": "object"
+    },
+    "LetteringPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/LetterStyle"
+        },
+        "motion": {
+          "items": {
+            "$ref": "#/$defs/MotionPoint"
+          },
+          "maxItems": 32,
+          "title": "Motion",
+          "type": "array"
+        },
+        "treatment": {
+          "default": "font",
+          "enum": [
+            "font",
+            "artwork"
+          ],
+          "title": "Treatment",
+          "type": "string"
+        },
+        "artwork_prompt": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Artwork Prompt",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 1600,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "style",
+        "rationale"
+      ],
+      "title": "LetteringPlan",
+      "type": "object"
+    },
+    "MotionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "time_ms": {
+          "minimum": 0,
+          "title": "Time Ms",
+          "type": "integer"
+        },
+        "x": {
+          "default": 0,
+          "maximum": 16384,
+          "minimum": -16384,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0,
+          "maximum": 16384,
+          "minimum": -16384,
+          "title": "Y",
+          "type": "number"
+        },
+        "scale": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Scale",
+          "type": "number"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_ms"
+      ],
+      "title": "MotionPoint",
+      "type": "object"
+    },
+    "SpeakerVoice": {
+      "additionalProperties": false,
+      "properties": {
+        "speaker": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Speaker",
+          "type": "string"
+        },
+        "voice": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Voice",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "speaker",
+        "voice",
+        "reason"
+      ],
+      "title": "SpeakerVoice",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "lettering": {
+      "items": {
+        "$ref": "#/$defs/LetteringPlan"
+      },
+      "maxItems": 200,
+      "title": "Lettering",
+      "type": "array"
+    },
+    "speakers": {
+      "items": {
+        "$ref": "#/$defs/SpeakerVoice"
+      },
+      "maxItems": 50,
+      "title": "Speakers",
+      "type": "array"
+    },
+    "preserve_music": {
+      "default": true,
+      "title": "Preserve Music",
+      "type": "boolean"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Notes",
+      "type": "array"
+    }
+  },
+  "title": "AdaptivePlan",
+  "type": "object",
+  "$id": "urn:video-translation:agent/adaptive-plan:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

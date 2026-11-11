@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "Defect": {
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "enum": [
+            "critical",
+            "major",
+            "minor"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "start_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start Ms"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Id"
+        },
+        "evidence": {
+          "title": "Evidence",
+          "type": "string"
+        }
+      },
+      "required": [
+        "severity",
+        "message",
+        "evidence"
+      ],
+      "title": "Defect",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "verdict": {
+      "enum": [
+        "pass",
+        "needs_revision",
+        "needs_human"
+      ],
+      "title": "Verdict",
+      "type": "string"
+    },
+    "covered_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Covered Ids",
+      "type": "array"
+    },
+    "defects": {
+      "items": {
+        "$ref": "#/$defs/Defect"
+      },
+      "title": "Defects",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence",
+      "type": "array"
+    },
+    "limitations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    }
+  },
+  "required": [
+    "verdict",
+    "covered_ids",
+    "evidence"
+  ],
+  "title": "ReviewReport",
+  "type": "object",
+  "$id": "urn:video-translation:agent/review-report:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

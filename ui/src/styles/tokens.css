@@ -1,0 +1,39 @@
+/* Hallmark · genre: modern-minimal · structure: operational index + directed workflow · theme: custom Studio */
+:root {
+  --color-paper: #f5f6f7;
+  --color-surface: #ffffff;
+  --color-sidebar: #f0f2f3;
+  --color-ink: #202a32;
+  --color-muted: #63727d;
+  --color-faint: #89959e;
+  --color-line: #dfe5e8;
+  --color-accent: #11695c;
+  --color-accent-hover: #0b554a;
+  --color-accent-soft: #e2efea;
+  --color-blue: #305e9d;
+  --color-blue-soft: #eaf0f8;
+  --color-danger: #a43c3c;
+  --color-danger-soft: #f9eded;
+  --color-amber: #845d14;
+  --color-amber-soft: #f7efdc;
+  --color-graph: #f7f9fa;
+  --color-overlay: #14252d66;
+  --color-shadow: #182c3914;
+  --color-focus: #227cbe;
+  --color-transparent: transparent;
+  --font-display:
+    "Segoe UI", "Microsoft YaHei UI", "Noto Sans CJK SC", sans-serif;
+  --font-body: var(--font-display);
+  --font-mono: "Cascadia Code", "Consolas", monospace;
+  --radius-sm: 5px;
+  --radius: 9px;
+  --radius-lg: 14px;
+  --shadow: 0 8px 30px var(--color-shadow);
+  --sidebar-width: 226px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+}

@@ -1,0 +1,63 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "node_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Node Id",
+      "type": "string"
+    },
+    "locale": {
+      "maxLength": 35,
+      "minLength": 2,
+      "title": "Locale",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "evidence_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "max_paid_calls": {
+      "maximum": 1000,
+      "minimum": 0,
+      "title": "Max Paid Calls",
+      "type": "integer"
+    },
+    "max_image_calls": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Max Image Calls",
+      "type": "integer"
+    },
+    "max_kie_credits": {
+      "maximum": 10000,
+      "minimum": 0,
+      "title": "Max Kie Credits",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "node_id",
+    "locale",
+    "reason",
+    "evidence_ids",
+    "max_paid_calls",
+    "max_image_calls",
+    "max_kie_credits"
+  ],
+  "title": "ReworkRequest",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/directed-rework:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

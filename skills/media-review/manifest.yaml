@@ -1,0 +1,7 @@
+id: video-translation.media-review
+version: "1.5.0"
+name: 候选媒体审阅步骤
+status: active
+nodes: [clean, review]
+content: SKILL.md
+description: 清底候选先检查帧边界并三方归因；最终译片逐项审阅，完整视听与版本批准交给人工验收。

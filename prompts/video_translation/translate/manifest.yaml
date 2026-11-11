@@ -1,0 +1,7 @@
+id: video-translation.translate
+version: "1.0.0"
+name: 目标语完整翻译
+status: active
+nodes: [translate]
+content: instruction.md
+description: 精确覆盖全部待译画面文字与人声ID，生成自然目标语文本。

@@ -1,0 +1,25 @@
+.delivery-options {
+  min-inline-size: 0;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.delivery-options legend { padding: 0 6px; font-size: 13px; font-weight: 600; }
+.form-stack .delivery-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  min-height: 44px;
+  gap: 12px;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.delivery-options label:has(input:checked) { background: var(--color-accent-soft); color: var(--color-accent); }
+.delivery-options input { width: 18px; height: 18px; flex: 0 0 18px; accent-color: var(--color-accent); }
+.delivery-options label span { overflow-wrap: anywhere; }
+.delivery-options:disabled label { cursor: not-allowed; opacity: 0.7; }

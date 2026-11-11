@@ -1,0 +1,74 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "assign_work",
+        "blocked"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2400,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "source_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Id"
+    },
+    "method": {
+      "anyOf": [
+        {
+          "enum": [
+            "local_surface",
+            "tracked_donor",
+            "inspect",
+            "image_reference",
+            "reference_plate"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Method"
+    },
+    "question": {
+      "default": "",
+      "maxLength": 2400,
+      "title": "Question",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Evidence",
+      "type": "array"
+    }
+  },
+  "required": [
+    "action",
+    "reason",
+    "evidence"
+  ],
+  "title": "CleanRouteDecision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/clean-route:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

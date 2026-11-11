@@ -1,0 +1,10 @@
+{
+  "version": "1.0.0",
+  "transcription": "gemini-audio-pro",
+  "tts": "gemini-tts-pro",
+  "video": "wan-video-3",
+  "options": {
+    "tts": {"voice": "Kore", "accent": "Neutral", "temperature": 1},
+    "video": {"resolution": "720p", "prompt_extend": false}
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "agent_enabled": {
+      "default": true,
+      "title": "Agent Enabled",
+      "type": "boolean"
+    },
+    "max_calls_per_day": {
+      "default": 20,
+      "maximum": 500,
+      "minimum": 0,
+      "title": "Max Calls Per Day",
+      "type": "integer"
+    },
+    "auto_pause": {
+      "default": false,
+      "title": "Auto Pause",
+      "type": "boolean"
+    },
+    "stall_minutes": {
+      "default": 30,
+      "maximum": 1440,
+      "minimum": 5,
+      "title": "Stall Minutes",
+      "type": "integer"
+    }
+  },
+  "title": "ManagerSettings",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/manager-settings:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

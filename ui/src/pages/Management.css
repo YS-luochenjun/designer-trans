@@ -1,0 +1,57 @@
+.home-summary { display: flex; flex-wrap: wrap; gap: 8px 24px; padding: 12px 0 20px; margin-bottom: 4px; }
+.home-summary a { display: inline-flex; align-items: baseline; gap: 12px; color: var(--color-muted); }
+.home-summary a:hover { color: var(--color-accent); }
+.home-summary strong { color: var(--color-ink); font-size: 20px; font-weight: 600; }
+.manager-runtime { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--color-muted); }
+.manager-purpose { margin: 16px 0 0; font-size: 13px; }
+.manager-purpose > summary { cursor: pointer; color: var(--color-accent); width: fit-content; }
+.manager-purpose p { max-width: 760px; line-height: 1.8; margin: 10px 0; }
+.manager-issue { padding: 16px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); margin-bottom: 12px; overflow-wrap: anywhere; }
+.manager-issue p { margin: 8px 0 12px; white-space: pre-wrap; }
+.manager-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--color-faint); }
+.manager-indicator.online { background: var(--color-accent); }
+.manager-layout { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+.manager-layout > *, .manager-todos > * { min-width: 0; }
+.manager-layout .panel, .manager-records { padding: 20px; }
+.manager-section-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.manager-section-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 16px; }
+.manager-section-head small, .manager-entry-meta > span:not(.status) { color: var(--color-muted); }
+.manager-log { height: 420px; overflow-y: auto; padding-right: 8px; }
+.manager-log, .manager-scroll {
+  overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin;
+}
+.manager-entry { padding: 16px 0; border-bottom: 1px solid var(--color-line); overflow-wrap: anywhere; }
+.manager-entry:first-child { padding-top: 0; }
+.manager-entry-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; font-size: 12px; margin-bottom: 10px; }
+.manager-entry p { white-space: pre-wrap; margin-bottom: 10px; }
+.manager-user { background: var(--color-paper); padding: 10px 12px; border-radius: var(--radius-sm); }
+.manager-reply { line-height: 1.85; }
+.manager-error { color: var(--color-danger); }
+.manager-compose { border-top: 1px solid var(--color-line); padding-top: 14px; margin-top: 8px; }
+.manager-compose label { display: block; font-weight: 600; margin-bottom: 8px; }
+.manager-compose textarea { width: 100%; resize: vertical; max-height: 200px; }
+.manager-compose-footer { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 10px; }
+.manager-compose-footer small { color: var(--color-muted); }
+.manager-todos { display: grid; gap: 20px; }
+.manager-scroll { max-height: 340px; overflow-y: auto; overflow-wrap: anywhere; }
+.manager-todo { padding: 12px; margin-bottom: 12px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.manager-todo p { white-space: pre-wrap; margin: 8px 0; }
+.manager-todo .actions { margin-top: 10px; }
+.manager-decision-feedback { padding: 12px; margin-bottom: 14px; background: var(--color-accent-soft); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.manager-decision-feedback p { margin-bottom: 8px; }
+.manager-records { margin: 20px 0; }
+.manager-records summary { cursor: pointer; }
+.manager-records details[open] > summary { margin-bottom: 14px; }
+.manager-records .manager-entry:last-child { border-bottom: 0; }
+.manager-audit { margin-top: 0; }
+.manager-records > summary { cursor: pointer; font-weight: 600; }
+.manager-records[open] > summary { padding-bottom: 16px; margin-bottom: 14px; border-bottom: 1px solid var(--color-line); }
+@media (max-width: 1100px) { .manager-layout { grid-template-columns: minmax(0, 1fr); } .manager-log { height: 420px; } }
+@media (max-width: 600px) {
+  .manager-layout.has-decisions .manager-todos { order: -1; }
+  .manager-layout .panel, .manager-records { padding: 16px; }
+  .manager-section-head { flex-wrap: wrap; }
+  .home-summary { gap: 8px 20px; }
+  .manager-compose-footer { align-items: start; }
+  .manager-log { height: 360px; }
+}

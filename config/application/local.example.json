@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "environment": {
+    "VT_AGENT_ENGINE": "codex",
+    "VT_CODEX_WORK_AUTONOMY": "open",
+    "VT_MEDIA_PROVIDER": "kie",
+    "VT_KIE_ENABLED": "false",
+    "VT_AGENT_TIMEOUT": "130",
+    "VT_HARNESS_MODEL": "deepseek-flash",
+    "VT_FIREPLAY_MODE": "mcp",
+    "VT_FIREPLAY_SERVICE": "ai_designer",
+    "VT_FIREPLAY_ENABLED": "false",
+    "VT_FIREPLAY_TOKEN_ENV": "VT_FIREPLAY_TOKEN",
+    "VT_FIREPLAY_SCOPE": "all",
+    "VT_SEPARATION_THREADS": "4"
+  },
+  "secret_files": {
+    "VT_KIE_API_KEY": {"path": "${PROJECT_ROOT}/runtime/config/kie-key.txt", "format": "text"},
+    "VT_HARNESS_API_KEY": {"path": "${PROJECT_ROOT}/runtime/config/harness-key.txt", "format": "text"},
+    "VT_FIREPLAY_TOKEN": {"path": "${PROJECT_ROOT}/runtime/config/fireplay-token.txt", "format": "text"}
+  }
+}

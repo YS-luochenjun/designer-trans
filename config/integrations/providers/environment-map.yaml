@@ -1,0 +1,32 @@
+# Reference only. Runtime uses ProviderConfig.from_env('asr'/'tts').
+version: "1.0.0"
+kind: environment_mapping
+configured_by_default: false
+asr:
+  base_url_environment: VT_ASR_BASE_URL
+  api_key_environment: VT_ASR_API_KEY
+  model_environment: VT_ASR_MODEL
+  endpoint_suffix: /audio/transcriptions
+  request: multipart_file_verbose_json_segment_timestamps
+  output: segments_start_ms_end_ms_text
+  missing_timestamp_behavior: reject_nonempty_transcript
+  max_audio_bytes: 26214400
+tts:
+  base_url_environment: VT_TTS_BASE_URL
+  api_key_environment: VT_TTS_API_KEY
+  model_environment: VT_TTS_MODEL
+  voice_environment: VT_TTS_VOICE
+  default_voice: alloy
+  endpoint_suffix: /audio/speech
+  response_format: wav
+  locale_handling: provider_infers_from_input_text
+  automatic_voice_selection_from_plan: false
+shared:
+  base_url_example: https://speech-provider.example.invalid/v1
+  timeout_seconds_constructor_default: 120
+  max_response_bytes_constructor_default: 52428800
+  network_failure: UnknownExternalResult
+  automatic_request_retries: 0
+  api_key_in_logs: false
+  api_key_in_config_files: false
+capabilities_not_implemented: [music_source_separation, voice_cloning, automatic_speaker_voice_mapping]

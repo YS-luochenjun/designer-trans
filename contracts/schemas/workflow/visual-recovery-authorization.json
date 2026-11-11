@@ -1,0 +1,53 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "approve": {
+      "title": "Approve",
+      "type": "boolean"
+    },
+    "expected_decision_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Decision Id",
+      "type": "string"
+    },
+    "expected_base_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Base Sha256",
+      "type": "string"
+    },
+    "expected_request_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Request Sha256",
+      "type": "string"
+    },
+    "expected_receipt_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Receipt Sha256",
+      "type": "string"
+    },
+    "expected_context_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Context Sha256",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2400,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "approve",
+    "expected_decision_id",
+    "expected_base_sha256",
+    "expected_request_sha256",
+    "expected_receipt_sha256",
+    "expected_context_sha256",
+    "reason"
+  ],
+  "title": "VisualRecoveryAuthorization",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/visual-recovery-authorization:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

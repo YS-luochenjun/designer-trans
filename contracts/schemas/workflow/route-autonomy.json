@@ -1,0 +1,53 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "enabled": {
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "expected_base_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Base Sha256",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2400,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "max_route_calls_per_hour": {
+      "default": 12,
+      "maximum": 60,
+      "minimum": 1,
+      "title": "Max Route Calls Per Hour",
+      "type": "integer"
+    },
+    "cooldown_seconds": {
+      "default": 30,
+      "maximum": 1800,
+      "minimum": 15,
+      "title": "Cooldown Seconds",
+      "type": "integer"
+    },
+    "diagnose_request_rejections": {
+      "default": false,
+      "title": "Diagnose Request Rejections",
+      "type": "boolean"
+    },
+    "recover_observation_context": {
+      "default": false,
+      "title": "Recover Observation Context",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "enabled",
+    "expected_base_sha256",
+    "reason"
+  ],
+  "title": "RouteAutonomy",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/route-autonomy:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,28 @@
+# Project-owned SDK composition; never applies to the desktop profile.
+- id: persistent-bash
+  disabled: true
+- id: persistent-pwsh
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-working-directory
+  disabled: true
+- id: tools
+  config:
+    mode: native
+- id: sandbox-policy
+  config:
+    mode: read-only
+- id: llm-retry
+  disabled: true
+- id: compaction-basic
+  disabled: true
+- id: image-offload
+  disabled: true
+- id: session-log-deepseek
+  disabled: true
+- id: plugin-package-inventory-deepseek
+  disabled: true
+- insert:
+    - id: video-translation-no-tools
+      name: !!js process.env.VT_HARNESS_GUARD

@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-translation-v2"
+version = "0.1.0"
+description = "Project-owned video localization workflow and workbench"
+requires-python = ">=3.12"
+dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.32,<1", "pydantic>=2.10,<3", "httpx>=0.28,<1", "python-multipart>=0.0.20,<1", "PyYAML>=6,<7", "Pillow>=11,<13", "tzdata>=2025", "jsonschema>=4,<5", "playwright>=1.51,<2"]
+
+[project.optional-dependencies]
+vision = ["numpy>=2,<3"]
+dev = ["pytest>=8,<10", "jsonschema>=4,<5", "ruff>=0.11,<1", "playwright>=1.51,<2"]
+
+[project.scripts]
+video-translation = "video_translation.interfaces.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --basetemp=runtime/tmp/pytest"
+cache_dir = "runtime/cache/pytest"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]

@@ -1,0 +1,30 @@
+# Reference contract for a separately implemented read-only bridge.
+version: "1.0.0"
+kind: environment_mapping_and_bridge_contract
+configured_by_default: false
+native_fireplay_api_compatibility_verified: false
+environment:
+  base_url: VT_FIREPLAY_BRIDGE_URL
+  bearer_token: VT_FIREPLAY_BRIDGE_TOKEN
+  visible_scope: VT_FIREPLAY_SCOPE
+transport:
+  method: GET
+  endpoint_suffix: /projects
+  query: [scope, limit, cursor]
+  limit: 100
+  page_cap: 100
+  timeout_seconds: 30
+  redirects: false
+  remote_requires_https: true
+  localhost_http_allowed: true
+response_contract:
+  required: [scope, total, items]
+  item_required: [id, title, status]
+  item_optional: [updated_at]
+  next_cursor: opaque_string_or_null
+  complete_condition: terminal_cursor_and_unique_item_count_equals_total
+storage:
+  allowed_item_fields: [id, title, status, updated_at]
+  added_metadata: {source: fireplay, external_only: true}
+  creates_translation_tasks: false
+  external_write_operations: []

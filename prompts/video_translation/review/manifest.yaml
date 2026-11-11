@@ -1,0 +1,7 @@
+id: video-translation.review
+version: "1.0.0"
+name: 基于证据的候选审核
+status: active
+nodes: [review]
+content: instruction.md
+description: 逐ID对照可用证据，显式标记抽帧与听验缺口并输出人工验收结论。

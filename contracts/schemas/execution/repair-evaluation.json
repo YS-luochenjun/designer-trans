@@ -1,0 +1,196 @@
+{
+  "$defs": {
+    "FileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FileRef",
+      "type": "object"
+    },
+    "FrameMask": {
+      "additionalProperties": false,
+      "properties": {
+        "frame_index": {
+          "minimum": 0,
+          "title": "Frame Index",
+          "type": "integer"
+        },
+        "removal": {
+          "$ref": "#/$defs/FileRef"
+        },
+        "protection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "frame_index",
+        "removal"
+      ],
+      "title": "FrameMask",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "const": 1,
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "mode": {
+      "const": "isolated_evaluation",
+      "default": "isolated_evaluation",
+      "title": "Mode",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/FileRef"
+    },
+    "base": {
+      "$ref": "#/$defs/FileRef"
+    },
+    "expected_base_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Expected Base Sha256",
+      "type": "string"
+    },
+    "first_frame": {
+      "minimum": 0,
+      "title": "First Frame",
+      "type": "integer"
+    },
+    "frame_count": {
+      "exclusiveMinimum": 0,
+      "maximum": 300,
+      "title": "Frame Count",
+      "type": "integer"
+    },
+    "context_first": {
+      "minimum": 0,
+      "title": "Context First",
+      "type": "integer"
+    },
+    "context_count": {
+      "exclusiveMinimum": 0,
+      "maximum": 300,
+      "title": "Context Count",
+      "type": "integer"
+    },
+    "width": {
+      "exclusiveMinimum": 0,
+      "title": "Width",
+      "type": "integer"
+    },
+    "height": {
+      "exclusiveMinimum": 0,
+      "title": "Height",
+      "type": "integer"
+    },
+    "rate": {
+      "title": "Rate",
+      "type": "string"
+    },
+    "engine": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Engine",
+      "type": "string"
+    },
+    "engine_version": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Engine Version",
+      "type": "string"
+    },
+    "weights_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Weights Sha256"
+    },
+    "usage_review": {
+      "const": "evaluation_only",
+      "default": "evaluation_only",
+      "title": "Usage Review",
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "default": 30,
+      "exclusiveMinimum": 0,
+      "maximum": 300,
+      "title": "Timeout Seconds",
+      "type": "number"
+    },
+    "max_output_bytes": {
+      "default": 67108864,
+      "exclusiveMinimum": 0,
+      "maximum": 536870912,
+      "title": "Max Output Bytes",
+      "type": "integer"
+    },
+    "max_decoded_bytes": {
+      "default": 134217728,
+      "exclusiveMinimum": 0,
+      "maximum": 536870912,
+      "title": "Max Decoded Bytes",
+      "type": "integer"
+    },
+    "masks": {
+      "items": {
+        "$ref": "#/$defs/FrameMask"
+      },
+      "maxItems": 300,
+      "minItems": 1,
+      "title": "Masks",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source",
+    "base",
+    "expected_base_sha256",
+    "first_frame",
+    "frame_count",
+    "context_first",
+    "context_count",
+    "width",
+    "height",
+    "rate",
+    "engine",
+    "engine_version",
+    "masks"
+  ],
+  "title": "EvaluationRequest",
+  "type": "object",
+  "$id": "urn:video-translation:execution/repair-evaluation:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

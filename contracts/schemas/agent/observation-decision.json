@@ -1,0 +1,240 @@
+{
+  "$defs": {
+    "Inventory": {
+      "additionalProperties": false,
+      "properties": {
+        "summary": {
+          "title": "Summary",
+          "type": "string"
+        },
+        "source_language": {
+          "title": "Source Language",
+          "type": "string"
+        },
+        "texts": {
+          "items": {
+            "$ref": "#/$defs/TextItem"
+          },
+          "maxItems": 200,
+          "title": "Texts",
+          "type": "array"
+        },
+        "speech": {
+          "items": {
+            "$ref": "#/$defs/SpeechItem"
+          },
+          "maxItems": 200,
+          "title": "Speech",
+          "type": "array"
+        },
+        "has_music": {
+          "title": "Has Music",
+          "type": "boolean"
+        },
+        "preserve_music": {
+          "default": true,
+          "title": "Preserve Music",
+          "type": "boolean"
+        },
+        "unknowns": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 30,
+          "title": "Unknowns",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "summary",
+        "source_language",
+        "has_music"
+      ],
+      "title": "Inventory",
+      "type": "object"
+    },
+    "Region": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "Region",
+      "type": "object"
+    },
+    "SpeechItem": {
+      "additionalProperties": false,
+      "properties": {
+        "start_ms": {
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "exclusiveMinimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        },
+        "id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "speaker": {
+          "default": "narrator",
+          "title": "Speaker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms",
+        "id",
+        "text"
+      ],
+      "title": "SpeechItem",
+      "type": "object"
+    },
+    "TextItem": {
+      "additionalProperties": false,
+      "properties": {
+        "start_ms": {
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "exclusiveMinimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        },
+        "id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        },
+        "treatment": {
+          "default": "translate",
+          "enum": [
+            "translate",
+            "preserve"
+          ],
+          "title": "Treatment",
+          "type": "string"
+        },
+        "reason": {
+          "default": "",
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms",
+        "id",
+        "text",
+        "region"
+      ],
+      "title": "TextItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "inspect",
+        "finish",
+        "clarify"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "times_ms": {
+      "items": {
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maxItems": 12,
+      "title": "Times Ms",
+      "type": "array"
+    },
+    "reason": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "inventory": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Inventory"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "action",
+    "reason"
+  ],
+  "title": "ObservationDecision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/observation-decision:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

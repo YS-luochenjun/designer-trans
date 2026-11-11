@@ -1,0 +1,7 @@
+id: video-translation.observe
+version: "2.0.0"
+name: 原片主动观察
+status: active
+nodes: [observe]
+content: instruction.md
+description: 对齐转写并主动补帧确认文字、边界和轨迹，记录实际证据与未观察区间。

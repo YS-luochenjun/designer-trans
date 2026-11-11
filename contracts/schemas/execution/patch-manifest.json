@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "FileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FileRef",
+      "type": "object"
+    },
+    "FramePatch": {
+      "additionalProperties": false,
+      "properties": {
+        "frame_index": {
+          "minimum": 0,
+          "title": "Frame Index",
+          "type": "integer"
+        },
+        "rectangle": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Rectangle",
+          "type": "array"
+        },
+        "image": {
+          "$ref": "#/$defs/FileRef"
+        }
+      },
+      "required": [
+        "frame_index",
+        "rectangle",
+        "image"
+      ],
+      "title": "FramePatch",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "const": 1,
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "kind": {
+      "const": "lossless_frame_patch",
+      "default": "lossless_frame_patch",
+      "title": "Kind",
+      "type": "string"
+    },
+    "base": {
+      "$ref": "#/$defs/FileRef"
+    },
+    "width": {
+      "exclusiveMinimum": 0,
+      "title": "Width",
+      "type": "integer"
+    },
+    "height": {
+      "exclusiveMinimum": 0,
+      "title": "Height",
+      "type": "integer"
+    },
+    "frames": {
+      "exclusiveMinimum": 0,
+      "maximum": 108000,
+      "title": "Frames",
+      "type": "integer"
+    },
+    "rate": {
+      "title": "Rate",
+      "type": "string"
+    },
+    "patches": {
+      "items": {
+        "$ref": "#/$defs/FramePatch"
+      },
+      "title": "Patches",
+      "type": "array"
+    },
+    "quality_status": {
+      "const": "unreviewed",
+      "default": "unreviewed",
+      "title": "Quality Status",
+      "type": "string"
+    }
+  },
+  "required": [
+    "base",
+    "width",
+    "height",
+    "frames",
+    "rate",
+    "patches"
+  ],
+  "title": "PatchManifest",
+  "type": "object",
+  "$id": "urn:video-translation:execution/patch-manifest:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

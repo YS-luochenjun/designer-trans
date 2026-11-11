@@ -1,0 +1,34 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "const": 1,
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "mode": {
+      "const": "efficient_v1",
+      "default": "efficient_v1",
+      "title": "Mode",
+      "type": "string"
+    },
+    "reserve_bytes": {
+      "default": 134217728,
+      "minimum": 0,
+      "title": "Reserve Bytes",
+      "type": "integer"
+    },
+    "max_unchanged_actions": {
+      "default": 12,
+      "maximum": 100,
+      "minimum": 2,
+      "title": "Max Unchanged Actions",
+      "type": "integer"
+    }
+  },
+  "title": "ExecutionProfile",
+  "type": "object",
+  "$id": "urn:video-translation:execution/profile:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

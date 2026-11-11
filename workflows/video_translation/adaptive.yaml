@@ -1,0 +1,18 @@
+id: video_translation
+version: 2.0.0
+nodes:
+  - {id: prepare, label: 准备媒体, stage: intake, scope: source, depends_on: []}
+  - {id: transcribe, label: 识别人声, stage: observe, scope: source, depends_on: [prepare]}
+  - {id: observe, label: 理解原片, stage: observe, scope: source, depends_on: [prepare, transcribe]}
+  - {id: visual_analyze, label: ① 保存文字设计, stage: visual, scope: source, depends_on: [observe]}
+  - {id: clean, label: ② 局部清字与补底, stage: visual, scope: source, depends_on: [visual_analyze]}
+  - {id: audio_prepare, label: ① 梳理人声与背景, stage: audio, scope: source, depends_on: [observe]}
+  - {id: translate, label: 翻译定稿, stage: translate, scope: locale, depends_on: [observe]}
+  - {id: plan, label: 语言与制作适配, stage: plan, scope: locale, depends_on: [translate, visual_analyze]}
+  - {id: audio_voice, label: ② 分角色配音与对齐, stage: audio, scope: locale, depends_on: [audio_prepare, translate, plan]}
+  - {id: typography, label: ③ 重建译文字层, stage: visual, scope: locale, depends_on: [clean, plan, audio_voice]}
+  - {id: visual, label: 画面对照与局部修订, stage: visual, scope: locale, depends_on: [typography]}
+  - {id: audio, label: ③ 组装音轨与混音检查, stage: audio, scope: locale, depends_on: [audio_voice]}
+  - {id: compose, label: 合成完整候选, stage: compose, scope: locale, depends_on: [visual, audio]}
+  - {id: review, label: 成片审核, stage: review, scope: locale, depends_on: [compose]}
+  - {id: deliver, label: 本地交付, stage: deliver, scope: locale, depends_on: [review]}

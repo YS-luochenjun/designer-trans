@@ -1,0 +1,47 @@
+# Local runtime, identity and production data.
+runtime/
+.venv*/
+.env
+.env.*
+!.env.example
+config/application/local.json
+config/agents/*.local.json
+auth.json
+cookies.json
+cookies.txt
+credentials.json
+*.pem
+*.key
+
+# Installed dependencies and generated files.
+node_modules/
+dist/
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.tsbuildinfo
+*.log
+.pytest_cache/
+.ruff_cache/
+
+# Tests, local verification and media do not belong to this public snapshot.
+tests/
+test-results/
+playwright-report/
+docs/verification/
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+*.zip
+*.sqlite*
+*.db
+*.onnx
+*.pt
+*.pth
+*.safetensors

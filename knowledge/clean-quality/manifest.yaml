@@ -1,0 +1,7 @@
+id: video-translation.clean-quality
+version: "1.3.0"
+name: 局部清底可用质量评分
+status: active
+nodes: [clean, review]
+content: policy.json
+description: 80分可用标准；短暂非文字轻微变化可接受，硬伤绑定结构化帧证据；矛盾先有界复核，保留残字与明显损伤拦截。

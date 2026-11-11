@@ -1,0 +1,38 @@
+# Reference only. Runtime uses AgentConfig.from_env(), not this YAML.
+version: "1.0.0"
+kind: environment_mapping
+configured_by_default: false
+mode:
+  environment: VT_AGENT_MODE
+  allowed: [unconfigured, http, command]
+  default: unconfigured
+http:
+  base_url_environment: VT_AGENT_BASE_URL
+  base_url_example: https://agent-provider.example.invalid/v1
+  api_key_environment: VT_AGENT_API_KEY
+  model_environment: VT_AGENT_MODEL
+  endpoint_suffix: /chat/completions
+  response_contract: json_schema
+  images: validated_base64_image_url
+  audio: reference_only
+  video: reference_only
+command:
+  argv_json_environment: VT_AGENT_COMMAND
+  required_placeholders: ["{input}", "{output}"]
+  example_argv:
+    - C:/path/to/python.exe
+    - C:/path/to/your-agent-wrapper.py
+    - --input
+    - "{input}"
+    - --output
+    - "{output}"
+  shell: false
+  inherited_environment_allowlist: [PATH, SYSTEMROOT, WINDIR, TEMP, TMP, PATHEXT]
+  protocol: file_packet_to_schema_validated_json
+  native_claude_cli_directly_compatible: false
+constructor_only:
+  timeout_seconds: 120
+  max_image_bytes: 10485760
+  max_images: 24
+  max_response_bytes: 2097152
+secrets_storage: environment_or_explicit_runtime_injection_only

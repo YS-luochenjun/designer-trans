@@ -1,0 +1,7 @@
+id: video-translation.common
+version: "2.0.0"
+name: 视频翻译共同约束
+status: active
+nodes: [observe, translate, plan, review, visual_analyze, clean, typography, visual, audio_voice]
+content: instruction.md
+description: 规定结构化动作、证据边界、局部试做检视、任务数据隔离及费用约束。

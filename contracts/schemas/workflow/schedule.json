@@ -1,0 +1,85 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "kind": {
+      "default": "project_patrol",
+      "enum": [
+        "project_patrol",
+        "requirements_check",
+        "agent_message"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "trigger": {
+      "enum": [
+        "interval",
+        "once"
+      ],
+      "title": "Trigger",
+      "type": "string"
+    },
+    "interval_seconds": {
+      "anyOf": [
+        {
+          "maximum": 31536000,
+          "minimum": 60,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Interval Seconds"
+    },
+    "run_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run At"
+    },
+    "timezone": {
+      "default": "Asia/Shanghai",
+      "title": "Timezone",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "prompt": {
+      "default": "",
+      "maxLength": 4000,
+      "title": "Prompt",
+      "type": "string"
+    },
+    "refresh_requirements": {
+      "default": false,
+      "title": "Refresh Requirements",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "name",
+    "trigger"
+  ],
+  "title": "ScheduleCreate",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/schedule:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

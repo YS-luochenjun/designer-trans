@@ -1,0 +1,311 @@
+{
+  "$defs": {
+    "LetterStyle": {
+      "additionalProperties": false,
+      "properties": {
+        "font_id": {
+          "default": "default",
+          "maxLength": 120,
+          "title": "Font Id",
+          "type": "string"
+        },
+        "font_size": {
+          "maximum": 400,
+          "minimum": 8,
+          "title": "Font Size",
+          "type": "integer"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "outline_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Outline Color",
+          "type": "string"
+        },
+        "outline_width": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Outline Width",
+          "type": "integer"
+        },
+        "shadow_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Shadow Color",
+          "type": "string"
+        },
+        "shadow_x": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow X",
+          "type": "integer"
+        },
+        "shadow_y": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow Y",
+          "type": "integer"
+        },
+        "align": {
+          "default": "center",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Align",
+          "type": "string"
+        }
+      },
+      "required": [
+        "font_size",
+        "color"
+      ],
+      "title": "LetterStyle",
+      "type": "object"
+    },
+    "MaskPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "MaskPoint",
+      "type": "object"
+    },
+    "MotionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "time_ms": {
+          "minimum": 0,
+          "title": "Time Ms",
+          "type": "integer"
+        },
+        "x": {
+          "default": 0,
+          "maximum": 16384,
+          "minimum": -16384,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0,
+          "maximum": 16384,
+          "minimum": -16384,
+          "title": "Y",
+          "type": "number"
+        },
+        "scale": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Scale",
+          "type": "number"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_ms"
+      ],
+      "title": "MotionPoint",
+      "type": "object"
+    },
+    "OcclusionFrame": {
+      "additionalProperties": false,
+      "properties": {
+        "time_ms": {
+          "minimum": 0,
+          "title": "Time Ms",
+          "type": "integer"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/MaskPoint"
+          },
+          "maxItems": 32,
+          "minItems": 3,
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "time_ms",
+        "points"
+      ],
+      "title": "OcclusionFrame",
+      "type": "object"
+    },
+    "SourceLettering": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "appearance": {
+          "maxLength": 1600,
+          "minLength": 1,
+          "title": "Appearance",
+          "type": "string"
+        },
+        "motion_description": {
+          "maxLength": 1600,
+          "minLength": 1,
+          "title": "Motion Description",
+          "type": "string"
+        },
+        "motion_status": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "static",
+            "dynamic"
+          ],
+          "title": "Motion Status",
+          "type": "string"
+        },
+        "motion_evidence_times_ms": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 32,
+          "title": "Motion Evidence Times Ms",
+          "type": "array"
+        },
+        "background_description": {
+          "maxLength": 1600,
+          "minLength": 1,
+          "title": "Background Description",
+          "type": "string"
+        },
+        "protected_content": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Protected Content",
+          "type": "array"
+        },
+        "evidence_times_ms": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 12,
+          "minItems": 1,
+          "title": "Evidence Times Ms",
+          "type": "array"
+        },
+        "style": {
+          "$ref": "#/$defs/LetterStyle"
+        },
+        "motion": {
+          "items": {
+            "$ref": "#/$defs/MotionPoint"
+          },
+          "maxItems": 32,
+          "title": "Motion",
+          "type": "array"
+        },
+        "speech_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Speech Id"
+        },
+        "needs_occlusion": {
+          "default": false,
+          "title": "Needs Occlusion",
+          "type": "boolean"
+        },
+        "occlusion": {
+          "items": {
+            "$ref": "#/$defs/OcclusionFrame"
+          },
+          "maxItems": 32,
+          "title": "Occlusion",
+          "type": "array"
+        },
+        "uncertainty": {
+          "default": "",
+          "maxLength": 1200,
+          "title": "Uncertainty",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "appearance",
+        "motion_description",
+        "background_description",
+        "evidence_times_ms",
+        "style"
+      ],
+      "title": "SourceLettering",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "lettering": {
+      "items": {
+        "$ref": "#/$defs/SourceLettering"
+      },
+      "maxItems": 200,
+      "title": "Lettering",
+      "type": "array"
+    },
+    "scene_boundaries_ms": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 200,
+      "title": "Scene Boundaries Ms",
+      "type": "array"
+    },
+    "observations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Observations",
+      "type": "array"
+    }
+  },
+  "title": "SourceDesign",
+  "type": "object",
+  "$id": "urn:video-translation:agent/source-design:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

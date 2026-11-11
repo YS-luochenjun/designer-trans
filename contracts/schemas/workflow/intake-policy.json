@@ -1,0 +1,162 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "const": 1,
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "identity": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Identity",
+      "type": "string"
+    },
+    "scope": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Scope",
+      "type": "string"
+    },
+    "delivery_types": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Delivery Types",
+      "type": "array"
+    },
+    "locales": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "minItems": 1,
+      "title": "Locales",
+      "type": "array"
+    },
+    "trusted_hosts": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Trusted Hosts",
+      "type": "array"
+    },
+    "trusted_origin_fields": {
+      "items": {
+        "enum": [
+          "description",
+          "refText"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Trusted Origin Fields",
+      "type": "array"
+    },
+    "department_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Department Ids",
+      "type": "array"
+    },
+    "max_queue": {
+      "default": 10,
+      "maximum": 100,
+      "minimum": 1,
+      "title": "Max Queue",
+      "type": "integer"
+    },
+    "max_active": {
+      "default": 1,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Max Active",
+      "type": "integer"
+    },
+    "max_scan": {
+      "default": 1000,
+      "maximum": 10000,
+      "minimum": 1,
+      "title": "Max Scan",
+      "type": "integer"
+    },
+    "daily_calls": {
+      "minimum": 0,
+      "title": "Daily Calls",
+      "type": "integer"
+    },
+    "daily_images": {
+      "minimum": 0,
+      "title": "Daily Images",
+      "type": "integer"
+    },
+    "daily_kie_credits": {
+      "minimum": 0,
+      "title": "Daily Kie Credits",
+      "type": "integer"
+    },
+    "task_calls": {
+      "maximum": 1000,
+      "minimum": 0,
+      "title": "Task Calls",
+      "type": "integer"
+    },
+    "task_images": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Task Images",
+      "type": "integer"
+    },
+    "task_kie_credits": {
+      "maximum": 10000,
+      "minimum": 0,
+      "title": "Task Kie Credits",
+      "type": "integer"
+    },
+    "max_visual_steps": {
+      "default": 30,
+      "maximum": 1000,
+      "minimum": 4,
+      "title": "Max Visual Steps",
+      "type": "integer"
+    },
+    "execution_profile": {
+      "const": "efficient_v1",
+      "default": "efficient_v1",
+      "title": "Execution Profile",
+      "type": "string"
+    },
+    "notes": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "identity",
+    "scope",
+    "delivery_types",
+    "locales",
+    "trusted_hosts",
+    "trusted_origin_fields",
+    "department_ids",
+    "daily_calls",
+    "daily_images",
+    "daily_kie_credits",
+    "task_calls",
+    "task_images",
+    "task_kie_credits"
+  ],
+  "title": "IntakePolicy",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/intake-policy:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

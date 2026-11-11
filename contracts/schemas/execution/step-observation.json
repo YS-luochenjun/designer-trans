@@ -1,0 +1,66 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "revision": {
+      "const": 1,
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "base_sha256": {
+      "title": "Base Sha256",
+      "type": "string"
+    },
+    "scope_sha256": {
+      "title": "Scope Sha256",
+      "type": "string"
+    },
+    "capability_sha256": {
+      "title": "Capability Sha256",
+      "type": "string"
+    },
+    "evidence_sha256": {
+      "title": "Evidence Sha256",
+      "type": "string"
+    },
+    "action": {
+      "title": "Action",
+      "type": "string"
+    },
+    "method": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Method"
+    },
+    "candidate_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Id"
+    }
+  },
+  "required": [
+    "base_sha256",
+    "scope_sha256",
+    "capability_sha256",
+    "evidence_sha256",
+    "action"
+  ],
+  "title": "StepObservation",
+  "type": "object",
+  "$id": "urn:video-translation:execution/step-observation:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

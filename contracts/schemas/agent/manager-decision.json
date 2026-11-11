@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "ManagerProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "pause_task",
+            "resume_task",
+            "retry_task",
+            "sync_requirements"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "target_id": {
+          "maxLength": 128,
+          "title": "Target Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target_id",
+        "reason"
+      ],
+      "title": "ManagerProposal",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "reply": {
+      "maxLength": 6000,
+      "minLength": 1,
+      "title": "Reply",
+      "type": "string"
+    },
+    "question": {
+      "anyOf": [
+        {
+          "maxLength": 1500,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Question"
+    },
+    "actions": {
+      "items": {
+        "$ref": "#/$defs/ManagerProposal"
+      },
+      "maxItems": 8,
+      "title": "Actions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "reply"
+  ],
+  "title": "ManagerDecision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/manager-decision:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

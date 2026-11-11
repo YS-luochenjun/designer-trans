@@ -1,0 +1,7 @@
+id: video-translation.plan
+version: "2.0.0"
+name: 原片设计与局部制作
+status: active
+nodes: [plan, visual_analyze, clean, typography, visual, audio_voice]
+content: instruction.md
+description: 先保存源设计，按实例选择工具并检视候选，制作独立译文字层与分角色配音。

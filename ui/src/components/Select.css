@@ -1,0 +1,95 @@
+select.workbench-select {
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  max-width: 100%;
+  padding: 10px 38px 10px 13px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  background-color: var(--color-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2363727d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  color: var(--color-ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+select.workbench-select:hover:not(:disabled) {
+  border-color: var(--color-faint);
+  background-color: var(--color-paper);
+}
+select.workbench-select:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+  border-color: var(--color-focus);
+}
+select.workbench-select:disabled {
+  color: var(--color-muted);
+  background-color: var(--color-paper);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+select.workbench-select[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+/* Supporting browsers style the native picker; others retain their OS picker. */
+@supports (appearance: base-select) {
+  select.workbench-select,
+  select.workbench-select::picker(select) {
+    appearance: base-select;
+  }
+  select.workbench-select::picker-icon {
+    display: none;
+  }
+  select.workbench-select::picker(select) {
+    margin-block: 6px;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius);
+    padding: 5px;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    box-shadow: var(--shadow);
+    max-block-size: min(320px, 60dvh);
+    max-inline-size: calc(100vw - 24px);
+    overflow: auto;
+    overscroll-behavior: contain;
+  }
+  select.workbench-select option {
+    padding: 10px 12px;
+    min-block-size: 40px;
+    border-radius: var(--radius-sm);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-weight: 400;
+    cursor: pointer;
+  }
+  select.workbench-select option:checked {
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+  }
+  select.workbench-select option:hover,
+  select.workbench-select option:focus-visible {
+    background: var(--color-paper);
+    outline: 2px solid var(--color-focus);
+    outline-offset: -2px;
+  }
+  select.workbench-select option:disabled {
+    color: var(--color-muted);
+    cursor: not-allowed;
+  }
+}
+@media (forced-colors: active) {
+  select.workbench-select {
+    appearance: auto;
+    background-image: none;
+    border: 1px solid ButtonText;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  select.workbench-select { transition: none; }
+}

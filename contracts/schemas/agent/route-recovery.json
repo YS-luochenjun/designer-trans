@@ -1,0 +1,66 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "replace_work",
+        "reattach_observation",
+        "handoff_work",
+        "probe",
+        "verify_work_contract",
+        "wait",
+        "needs_user"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2400,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "probe": {
+      "anyOf": [
+        {
+          "enum": [
+            "receipt_integrity",
+            "schema_contract",
+            "runtime_readiness"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Probe"
+    },
+    "delay_seconds": {
+      "default": 60,
+      "maximum": 1800,
+      "minimum": 15,
+      "title": "Delay Seconds",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "action",
+    "reason",
+    "evidence"
+  ],
+  "title": "RouteRecoveryDecision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/route-recovery:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

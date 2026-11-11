@@ -1,0 +1,9 @@
+.task-deletion { overflow-wrap: anywhere; padding: 18px; gap: 12px; }
+.deletion-title { font-size: 16px; }
+.deletion-facts { display: flex; gap: 28px; padding: 10px 12px; background: var(--color-paper); border-radius: var(--radius); }
+.deletion-facts > span { display: grid; gap: 6px; color: var(--color-muted); }
+.deletion-facts strong { font-size: 16px; color: var(--color-ink); }
+.deletion-blockers { padding: 12px; color: var(--color-danger); background: var(--color-danger-soft); border-radius: var(--radius); }
+.deletion-blockers ul { padding-left: 20px; }
+.deletion-pending { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; border: 1px solid var(--color-line); border-radius: var(--radius); }
+.task-deletion .modal-actions { flex-wrap: wrap; }

@@ -1,0 +1,7 @@
+id: video-translation.methods
+version: "2.8.0"
+name: 局部制作选型与证据
+status: active
+nodes: [observe, translate, plan, review, visual_analyze, clean, typography, visual, audio_voice]
+content: guidance.md
+description: 比较实色、源帧补底、图像编辑和局部Wan的适用证据与换法条件；说明运动、遮挡、字层及声音定稿。

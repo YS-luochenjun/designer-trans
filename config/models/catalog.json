@@ -1,0 +1,156 @@
+{
+  "version": "1.2.0",
+  "models": {
+    "gemini-audio-pro": {
+      "role": "transcription",
+      "label": "Gemini 3.1 Pro 音频理解转写（估计时间戳）",
+      "protocol": "kie_chat_audio_v1",
+      "model": "gemini-3.1-pro",
+      "endpoint_path": "/gemini-3.1-pro/v1/chat/completions",
+      "defaults": {},
+      "limitations": "非专用ASR；时间戳为模型估计，需核对漏词、说话人与对齐",
+      "source": "https://docs.kie.ai/market/gemini/gemini-3-1-pro.md",
+      "pricing_summary": "每百万 token：输入100 / 输出700 credits；音频计费以实际用量为准",
+      "pricing_source": "https://kie.ai/gemini-3-1-pro",
+      "pricing_verified_on": "2026-11-05"
+    },
+    "gemini-tts-pro": {
+      "role": "tts",
+      "label": "Gemini 2.5 Pro TTS · 当前默认",
+      "protocol": "kie_gemini_tts_v1",
+      "model": "google/gemini-2-5-pro-tts",
+      "defaults": {
+        "voice": "Kore",
+        "accent": "Neutral",
+        "temperature": 1
+      },
+      "limitations": "音频时长需本地测量；不保证词级时间戳",
+      "source": "https://docs.kie.ai/market/google/gemini-2-5-pro-tts.md",
+      "pricing_summary": "当前默认；未核得公开现价，以实际扣费为准"
+    },
+    "wan-video-3": {
+      "role": "video",
+      "label": "Wan 3.0 参考视频局部补底 · 默认",
+      "protocol": "kie_wan_reference_v1",
+      "model": "wan/3-0-video",
+      "defaults": {
+        "resolution": "720p",
+        "prompt_extend": false,
+        "audio_setting": "origin",
+        "duration": 0
+      },
+      "limits": {
+        "min_seconds": 2,
+        "max_seconds": 10,
+        "max_bytes": 100000000
+      },
+      "estimated_credits_per_second": {
+        "720p": 16,
+        "1080p": 32
+      },
+      "billing_basis": "input_reference_plus_output",
+      "pricing_verified_on": "2026-11-09",
+      "pricing_summary": "输入参考视频和输出视频都计费；720p每秒16、1080p每秒32 credits。本地仅补重复末帧至整数秒，生成音频关闭，原声由本地合成保留。",
+      "limitations": "独立参考视频生成协议；不是2.7原视频编辑接口。可能改变构图、主体或运动；必须通过原片/底片/候选与帧时钟验收。尚未付费验证当前素材。",
+      "source": "https://docs.kie.ai/market/wan/3-0-video.md",
+      "pricing_source": "https://kie.ai/wan3.0-video"
+    },
+    "wan-video-edit": {
+      "role": "video",
+      "label": "Wan 2.7 原视频编辑",
+      "protocol": "kie_wan_edit_v1",
+      "model": "wan/2-7-videoedit",
+      "defaults": {
+        "resolution": "720p",
+        "prompt_extend": false,
+        "audio_setting": "origin",
+        "duration": 0
+      },
+      "limits": {
+        "min_seconds": 2,
+        "max_seconds": 10,
+        "max_bytes": 104857600
+      },
+      "estimated_credits_per_second": {
+        "720p": 16,
+        "1080p": 24
+      },
+      "pricing_verified_on": "2026-11-04",
+      "limitations": "生成结果可能改变主体或动作；长片分镜/自动拼接尚未实现",
+      "source": "https://docs.kie.ai/market/wan/2-7-videoedit.md",
+      "pricing_source": "https://kie.ai/wan-2-7-video"
+    },
+    "gemini-tts-lite": {
+      "role": "tts",
+      "label": "Gemini 3.8 Flash Lite TTS · 低价",
+      "protocol": "kie_gemini38_tts_v1",
+      "model": "google/gemini-3-8-flash-lite-tts",
+      "defaults": {
+        "voice": "Kore",
+        "temperature": 1
+      },
+      "pricing_summary": "每百万 token：输入 70 / 音频输出 840 credits；优惠至2026-12-31",
+      "pricing_verified_on": "2026-11-05",
+      "pricing_source": "https://kie.ai/gemini-3.8-flash-lite-tts",
+      "source": "https://docs.kie.ai/market/google/gemini-3-8-flash-lite-tts.md",
+      "limitations": "已适配接口；尚未付费试听。价格档不代表质量排名；保留现有30种共有音色。"
+    },
+    "gemini-tts-flash": {
+      "role": "tts",
+      "label": "Gemini 3.8 Flash TTS · 中档",
+      "protocol": "kie_gemini38_tts_v1",
+      "model": "google/gemini-3-8-flash-tts",
+      "defaults": {
+        "voice": "Kore",
+        "temperature": 1
+      },
+      "pricing_summary": "每百万 token：输入 70 / 音频输出 1260 credits；优惠至2026-12-31",
+      "pricing_verified_on": "2026-11-05",
+      "pricing_source": "https://kie.ai/gemini-3.8-flash-tts",
+      "source": "https://docs.kie.ai/market/google/gemini-3-8-flash-tts.md",
+      "limitations": "已适配接口；尚未付费试听。价格档不代表质量排名；保留现有30种共有音色。"
+    },
+    "gemini-tts-flash31": {
+      "role": "tts",
+      "label": "Gemini 3.1 Flash TTS · 高价",
+      "protocol": "kie_gemini_tts_v1",
+      "model": "google/gemini-3-1-flash-tts",
+      "defaults": {
+        "voice": "Kore",
+        "temperature": 1,
+        "accent": "Neutral"
+      },
+      "pricing_summary": "每百万 token：输入 140 / 音频输出 2800 credits",
+      "pricing_verified_on": "2026-11-05",
+      "pricing_source": "https://kie.ai/gemini-3.1-flash-tts",
+      "source": "https://docs.kie.ai/market/google/gemini-3-1-flash-tts.md",
+      "limitations": "已适配接口；尚未付费试听。价格档不代表质量排名；保留现有30种共有音色。"
+    },
+    "gemini-audio-flash": {
+      "role": "transcription",
+      "label": "Gemini 3.8 Flash · 低价转写",
+      "protocol": "kie_chat_audio_v1",
+      "model": "gemini-3-8-flash-openai",
+      "endpoint_path": "/gemini-3-8-flash-openai/v1/chat/completions",
+      "defaults": {},
+      "pricing_summary": "每百万 token：输入45 / 输出225 credits；优惠至2026-12-31 06:00 UTC。音频计费以实际用量为准",
+      "pricing_verified_on": "2026-11-05",
+      "pricing_source": "https://kie.ai/gemini-3-8-flash",
+      "source": "https://docs.kie.ai/market/gemini/gemini-3-8-flash-openai.md",
+      "limitations": "音频理解转写，时间戳为估计；接口已核对，尚未实际转写验收。"
+    },
+    "gemini-audio-argon": {
+      "role": "transcription",
+      "label": "Gemini 4 Argon · 高价转写",
+      "protocol": "kie_chat_audio_v1",
+      "model": "gemini-4-argon-openai",
+      "endpoint_path": "/gemini-4-argon-openai/v1/chat/completions",
+      "defaults": {},
+      "pricing_summary": "每百万 token：输入160 / 输出800 credits；优惠至2026-11-30。音频计费以实际用量为准",
+      "pricing_verified_on": "2026-11-05",
+      "pricing_source": "https://kie.ai/gemini-4-argon",
+      "source": "https://docs.kie.ai/market/gemini/gemini-4-argon-openai.md",
+      "limitations": "音频理解转写，时间戳为估计；接口已核对，尚未实际转写验收。"
+    }
+  }
+}

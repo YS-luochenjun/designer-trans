@@ -1,0 +1,30 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "source_id": {
+      "title": "Source Id",
+      "type": "string"
+    },
+    "text": {
+      "maxLength": 8000,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 1600,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source_id",
+    "text",
+    "reason"
+  ],
+  "title": "SpeechRevision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/speech-revision:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

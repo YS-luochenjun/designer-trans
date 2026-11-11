@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "TranslationItem": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "text"
+      ],
+      "title": "TranslationItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "locale": {
+      "title": "Locale",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/TranslationItem"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "locale",
+    "items"
+  ],
+  "title": "TranslationPackage",
+  "type": "object",
+  "$id": "urn:video-translation:agent/translation-package:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

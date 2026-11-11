@@ -1,0 +1,626 @@
+{
+  "$defs": {
+    "CleanFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "readable_source_text",
+            "subject_damage",
+            "new_object",
+            "severe_flicker",
+            "edge",
+            "texture",
+            "brightness",
+            "other"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "minor",
+            "major",
+            "uncertain"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "frame_indices": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 24,
+          "minItems": 1,
+          "title": "Frame Indices",
+          "type": "array"
+        },
+        "observation": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Observation",
+          "type": "string"
+        },
+        "viewing_impact": {
+          "maxLength": 800,
+          "minLength": 1,
+          "title": "Viewing Impact",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "severity",
+        "frame_indices",
+        "observation",
+        "viewing_impact"
+      ],
+      "title": "CleanFinding",
+      "type": "object"
+    },
+    "CleanQuality": {
+      "additionalProperties": false,
+      "properties": {
+        "text_removal": {
+          "maximum": 40,
+          "minimum": 0,
+          "title": "Text Removal",
+          "type": "integer"
+        },
+        "subject_preservation": {
+          "maximum": 40,
+          "minimum": 0,
+          "title": "Subject Preservation",
+          "type": "integer"
+        },
+        "temporal_consistency": {
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Temporal Consistency",
+          "type": "integer"
+        },
+        "hard_failures": {
+          "items": {
+            "enum": [
+              "readable_source_text",
+              "subject_damage",
+              "new_object",
+              "severe_flicker"
+            ],
+            "type": "string"
+          },
+          "title": "Hard Failures",
+          "type": "array"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Limitations",
+          "type": "array"
+        },
+        "findings": {
+          "items": {
+            "$ref": "#/$defs/CleanFinding"
+          },
+          "maxItems": 12,
+          "title": "Findings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text_removal",
+        "subject_preservation",
+        "temporal_consistency"
+      ],
+      "title": "CleanQuality",
+      "type": "object"
+    },
+    "MaskPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y"
+      ],
+      "title": "MaskPoint",
+      "type": "object"
+    },
+    "OcclusionFrame": {
+      "additionalProperties": false,
+      "properties": {
+        "time_ms": {
+          "minimum": 0,
+          "title": "Time Ms",
+          "type": "integer"
+        },
+        "points": {
+          "items": {
+            "$ref": "#/$defs/MaskPoint"
+          },
+          "maxItems": 32,
+          "minItems": 3,
+          "title": "Points",
+          "type": "array"
+        }
+      },
+      "required": [
+        "time_ms",
+        "points"
+      ],
+      "title": "OcclusionFrame",
+      "type": "object"
+    },
+    "Region": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Y",
+          "type": "number"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Width",
+          "type": "number"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Height",
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "Region",
+      "type": "object"
+    },
+    "RepairKeyframe": {
+      "additionalProperties": false,
+      "properties": {
+        "time_ms": {
+          "minimum": 0,
+          "title": "Time Ms",
+          "type": "integer"
+        },
+        "region": {
+          "$ref": "#/$defs/Region"
+        }
+      },
+      "required": [
+        "time_ms",
+        "region"
+      ],
+      "title": "RepairKeyframe",
+      "type": "object"
+    },
+    "SurfaceRepair": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "default": "linear",
+          "enum": [
+            "linear",
+            "plane"
+          ],
+          "title": "Model",
+          "type": "string"
+        },
+        "axis": {
+          "default": "horizontal",
+          "enum": [
+            "horizontal",
+            "vertical"
+          ],
+          "title": "Axis",
+          "type": "string"
+        },
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/RepairKeyframe"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Keyframes",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "max_edge_difference": {
+          "default": 32,
+          "maximum": 64,
+          "minimum": 0,
+          "title": "Max Edge Difference",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keyframes",
+        "evidence"
+      ],
+      "title": "SurfaceRepair",
+      "type": "object"
+    },
+    "TrackedDonorRepair": {
+      "additionalProperties": false,
+      "description": "Observed target geometry; the clean donor belongs to the same shot.",
+      "properties": {
+        "keyframes": {
+          "items": {
+            "$ref": "#/$defs/RepairKeyframe"
+          },
+          "maxItems": 600,
+          "minItems": 2,
+          "title": "Keyframes",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 16,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "scene_start_ms": {
+          "minimum": 0,
+          "title": "Scene Start Ms",
+          "type": "integer"
+        },
+        "scene_end_ms": {
+          "exclusiveMinimum": 0,
+          "title": "Scene End Ms",
+          "type": "integer"
+        },
+        "max_border_error": {
+          "default": 20,
+          "maximum": 40,
+          "minimum": 0,
+          "title": "Max Border Error",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "keyframes",
+        "evidence",
+        "scene_start_ms",
+        "scene_end_ms"
+      ],
+      "title": "TrackedDonorRepair",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "inspect",
+        "track",
+        "inspect_pipeline",
+        "inspect_archive",
+        "rebase_candidate",
+        "defer",
+        "reject_candidate",
+        "consult",
+        "revise_scope",
+        "confirm_scope",
+        "restore_candidate",
+        "repair",
+        "request_reference",
+        "accept",
+        "finish",
+        "blocked"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2400,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "process_findings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 5,
+      "title": "Process Findings",
+      "type": "array"
+    },
+    "source_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Id"
+    },
+    "times_ms": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 12,
+      "title": "Times Ms",
+      "type": "array"
+    },
+    "method": {
+      "anyOf": [
+        {
+          "enum": [
+            "flat",
+            "donor",
+            "image_edit",
+            "wan",
+            "local_surface",
+            "tracked_donor",
+            "reference_plate"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Method"
+    },
+    "reference_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reference Id"
+    },
+    "start_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Start Ms"
+    },
+    "end_ms": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "End Ms"
+    },
+    "context_start_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context Start Ms"
+    },
+    "context_end_ms": {
+      "anyOf": [
+        {
+          "exclusiveMinimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Context End Ms"
+    },
+    "region": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Region"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "background": {
+      "default": "#000000",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "title": "Background",
+      "type": "string"
+    },
+    "donor_time_ms": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Donor Time Ms"
+    },
+    "donor_region": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Region"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "prompt": {
+      "default": "",
+      "maxLength": 6000,
+      "title": "Prompt",
+      "type": "string"
+    },
+    "candidate_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Candidate Id"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "knowledge_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Knowledge Ids",
+      "type": "array"
+    },
+    "quality": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CleanQuality"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "review_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Review Sha256"
+    },
+    "reviewed_source_ids": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 200,
+      "title": "Reviewed Source Ids",
+      "type": "array"
+    },
+    "absent_times_ms": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 12,
+      "title": "Absent Times Ms",
+      "type": "array"
+    },
+    "surface_repair": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SurfaceRepair"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tracked_donor": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TrackedDonorRepair"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "protected_foreground": {
+      "items": {
+        "$ref": "#/$defs/OcclusionFrame"
+      },
+      "maxItems": 32,
+      "title": "Protected Foreground",
+      "type": "array"
+    }
+  },
+  "required": [
+    "action",
+    "reason"
+  ],
+  "title": "CleanAction",
+  "type": "object",
+  "$id": "urn:video-translation:agent/clean-action:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,7 @@
+id: video-translation.temporal-cleanup
+version: "1.0.0"
+name: 连续帧清字与同源补底
+status: active
+nodes: [visual_analyze, clean, typography, visual]
+content: SKILL.md
+description: 动态残字、静态补片漂移、遮挡与转场失败时，按实际帧定位、跟踪、选择本地方法并验证；外部工具仅作候选。

@@ -1,0 +1,225 @@
+{
+  "$defs": {
+    "LetterStyle": {
+      "additionalProperties": false,
+      "properties": {
+        "font_id": {
+          "default": "default",
+          "maxLength": 120,
+          "title": "Font Id",
+          "type": "string"
+        },
+        "font_size": {
+          "maximum": 400,
+          "minimum": 8,
+          "title": "Font Size",
+          "type": "integer"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "outline_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Outline Color",
+          "type": "string"
+        },
+        "outline_width": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Outline Width",
+          "type": "integer"
+        },
+        "shadow_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Shadow Color",
+          "type": "string"
+        },
+        "shadow_x": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow X",
+          "type": "integer"
+        },
+        "shadow_y": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow Y",
+          "type": "integer"
+        },
+        "align": {
+          "default": "center",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Align",
+          "type": "string"
+        }
+      },
+      "required": [
+        "font_size",
+        "color"
+      ],
+      "title": "LetterStyle",
+      "type": "object"
+    },
+    "LetteringPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/LetterStyle"
+        },
+        "motion": {
+          "items": {
+            "$ref": "#/$defs/MotionPoint"
+          },
+          "maxItems": 32,
+          "title": "Motion",
+          "type": "array"
+        },
+        "treatment": {
+          "default": "font",
+          "enum": [
+            "font",
+            "artwork"
+          ],
+          "title": "Treatment",
+          "type": "string"
+        },
+        "artwork_prompt": {
+          "default": "",
+          "maxLength": 4000,
+          "title": "Artwork Prompt",
+          "type": "string"
+        },
+        "rationale": {
+          "maxLength": 1600,
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "style",
+        "rationale"
+      ],
+      "title": "LetteringPlan",
+      "type": "object"
+    },
+    "MotionPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "time_ms": {
+          "minimum": 0,
+          "title": "Time Ms",
+          "type": "integer"
+        },
+        "x": {
+          "default": 0,
+          "maximum": 16384,
+          "minimum": -16384,
+          "title": "X",
+          "type": "number"
+        },
+        "y": {
+          "default": 0,
+          "maximum": 16384,
+          "minimum": -16384,
+          "title": "Y",
+          "type": "number"
+        },
+        "scale": {
+          "default": 1,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Scale",
+          "type": "number"
+        },
+        "opacity": {
+          "default": 1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Opacity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "time_ms"
+      ],
+      "title": "MotionPoint",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "accept",
+        "revise",
+        "inspect",
+        "blocked"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2400,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "candidate_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Candidate Sha256",
+      "type": "string"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Evidence",
+      "type": "array"
+    },
+    "times_ms": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 12,
+      "title": "Times Ms",
+      "type": "array"
+    },
+    "revisions": {
+      "items": {
+        "$ref": "#/$defs/LetteringPlan"
+      },
+      "maxItems": 50,
+      "title": "Revisions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "action",
+    "reason",
+    "candidate_sha256",
+    "evidence"
+  ],
+  "title": "LetteringDecision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/lettering-decision:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

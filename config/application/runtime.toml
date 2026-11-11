@@ -1,0 +1,4 @@
+# 本机单执行器，改变配置后重启服务；运行任务保留资源快照。
+max_concurrent_tasks = 2
+max_upload_bytes = 536870912
+max_duration_ms = 180000

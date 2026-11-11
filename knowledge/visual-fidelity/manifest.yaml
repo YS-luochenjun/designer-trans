@@ -1,0 +1,7 @@
+id: video-translation.visual-fidelity
+version: "1.0.0"
+name: 原片保真与文字替换
+status: active
+nodes: [observe, translate, visual_analyze, plan, clean, typography, visual, review]
+content: policy.md
+description: 仅替换语言内容，继承文字设计与运动；按损伤原因换法，分开清底合格与译字保真验收。

@@ -1,0 +1,46 @@
+.architecture-summary { display: flex; flex-wrap: wrap; gap: 12px 28px; align-items: center; padding: 16px 20px; border: 1px solid var(--color-line); border-radius: var(--radius); background: linear-gradient(115deg, var(--color-accent-soft), var(--color-surface)); }
+.architecture-summary p { flex-basis: 100%; margin: 0; }
+.architecture-diagram { overflow: hidden; }
+.architecture-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 16px 20px; gap: 12px; border-bottom: 1px solid var(--color-line); }
+.architecture-toolbar h2 { margin: 0; font-size: 16px; }
+.architecture-canvas { height: 560px; background: var(--color-paper); }
+.architecture-node { box-sizing: border-box; width: 236px; height: 88px; padding: 14px 16px; border: 1px solid var(--color-line); border-radius: var(--radius-sm); background: var(--color-surface); display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+.architecture-node span { font-size: 12px; color: var(--color-muted); }
+.architecture-node strong { font-size: 15px; line-height: 1.35; }
+.architecture-node--agent { border-top: 4px solid var(--color-accent); }
+.architecture-node--human { border-top: 4px solid #b77d38; }
+.architecture-node--store, .architecture-node--session { border-top: 4px solid #6885a1; }
+.architecture-diagram .react-flow__node.selected .architecture-node { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.architecture-diagram .react-flow__handle { width: 6px; height: 6px; background: var(--color-muted); border: 0; }
+.architecture-detail { border-top: 1px solid var(--color-line); padding: 20px; display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 20px; min-height: 160px; max-height: 320px; overflow-y: auto; }
+.architecture-detail label { display: flex; flex-direction: column; gap: 8px; font-weight: 600; }
+.architecture-detail h3 { font-size: 16px; margin: 0 0 10px; }
+.architecture-detail p { margin: 0 0 12px; line-height: 1.8; }
+.architecture-detail code { overflow-wrap: anywhere; }
+.architecture-section { margin-top: 20px; padding: 20px; }
+.architecture-section h2 { font-size: 18px; margin: 0 0 16px; }
+.architecture-clean-heading { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 10px; }
+.architecture-clean-heading a { font-size: 13px; }
+.architecture-clean-heading + p { margin-top: 0; line-height: 1.8; }
+.architecture-section > details { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; }
+.architecture-section > details > summary { cursor: pointer; font-size: 13px; padding: 6px 0; }
+.architecture-table-wrap { overflow-x: auto; }
+.architecture-section table { width: 100%; border-collapse: collapse; }
+.architecture-section th, .architecture-section td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--color-line); vertical-align: top; }
+.architecture-section thead { background: var(--color-paper); }
+.architecture-section th { white-space: nowrap; }
+.architecture-section td { line-height: 1.8; min-width: 230px; }
+.architecture-roles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.architecture-roles article { padding: 16px; background: var(--color-paper); border: 1px solid var(--color-line); border-radius: var(--radius-sm); }
+.architecture-roles h3 { margin: 0 0 10px; font-size: 16px; }
+.architecture-roles p { margin: 0; line-height: 1.8; }
+.architecture-capabilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.architecture-capabilities ul { padding-left: 20px; margin: 0; line-height: 1.9; }
+.architecture-capabilities li + li { margin-top: 10px; }
+@media (max-width: 700px) {
+  .architecture-canvas { height: 430px; }
+  .architecture-detail, .architecture-roles, .architecture-capabilities { grid-template-columns: minmax(0, 1fr); }
+  .architecture-toolbar, .architecture-detail, .architecture-section { padding: 16px; }
+  .architecture-detail { max-height: 340px; }
+  .architecture-summary { padding: 16px; gap: 12px; }
+}

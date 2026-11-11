@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "VisualStep": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "route": {
+          "enum": [
+            "solid_overlay",
+            "external_clean_plate",
+            "wan_video_edit"
+          ],
+          "title": "Route",
+          "type": "string"
+        },
+        "background": {
+          "default": "#101820",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Background",
+          "type": "string"
+        },
+        "color": {
+          "default": "#ffffff",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "font_size": {
+          "default": 32,
+          "maximum": 240,
+          "minimum": 8,
+          "title": "Font Size",
+          "type": "integer"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "route",
+        "reason"
+      ],
+      "title": "VisualStep",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "visual_steps": {
+      "items": {
+        "$ref": "#/$defs/VisualStep"
+      },
+      "title": "Visual Steps",
+      "type": "array"
+    },
+    "voice": {
+      "default": "default",
+      "title": "Voice",
+      "type": "string"
+    },
+    "preserve_music": {
+      "default": true,
+      "title": "Preserve Music",
+      "type": "boolean"
+    },
+    "notes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Notes",
+      "type": "array"
+    }
+  },
+  "title": "ProductionPlan",
+  "type": "object",
+  "$id": "urn:video-translation:agent/production-plan:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}
