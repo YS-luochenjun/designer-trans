@@ -204,8 +204,8 @@
     },
     {
       "path": "docs/architecture/route-work.md",
-      "bytes": 4704,
-      "sha256": "80437600667d00f2d22fa2d6e1b7350f042e64f3ffe340f2b0a0c5b4c73d7c43"
+      "bytes": 5099,
+      "sha256": "da229590b2c460d8a5cc747b856609331e94faf5d609a209f6aac946780d878b"
     },
     {
       "path": "docs/iteration-plan.md",
@@ -224,8 +224,8 @@
     },
     {
       "path": "docs/operations/stage-quality.md",
-      "bytes": 1878,
-      "sha256": "d603c73536c1f7ca2e61f8861c1a433aba9693272b5c6dbb0f3e8681c76318c4"
+      "bytes": 2244,
+      "sha256": "66f97d0dda1270c2636701364a40e18ac5b1bd77a5bf5114fc5efa39baace49a"
     },
     {
       "path": "docs/source-release.md",
@@ -484,8 +484,8 @@
     },
     {
       "path": "src/video_translation/app.py",
-      "bytes": 22593,
-      "sha256": "73e3de5a0baf3d42cba70443224bdda5fd5f5a6f7fd3c389f9e73df81693d465"
+      "bytes": 22651,
+      "sha256": "3c8415b38db12023a4a60845b77db60f54c336c0fff7ff6f63f5ab8ba24e427d"
     },
     {
       "path": "src/video_translation/application/agent_recovery.py",
@@ -668,6 +668,11 @@
       "sha256": "e16d1acba74914382105d1e255ef7a723d993b92b95b3879bcc4a7cef4f676b9"
     },
     {
+      "path": "src/video_translation/application/retained_clean_checks.py",
+      "bytes": 12625,
+      "sha256": "a2546e0e941c74892710eb83a076ff8c0bd0c8cef8eb4bf4e787e0b19ad0edcf"
+    },
+    {
       "path": "src/video_translation/application/review_draft.py",
       "bytes": 2111,
       "sha256": "ec442703d5b7f15ee45b37f9395424c089e287b2c078bf39a756d38d8329c99e"
@@ -779,8 +784,8 @@
     },
     {
       "path": "src/video_translation/domain/production.py",
-      "bytes": 11944,
-      "sha256": "3c15ff9b7aae9520ff049208d5a5bc057c5a2859bfa45bf983ebc0850df52697"
+      "bytes": 12575,
+      "sha256": "73df4745c77c866743c2edb1a57a3e508828ffd7a89ec7d6430bc618654e87ff"
     },
     {
       "path": "src/video_translation/domain/repair_evaluation.py",
@@ -814,8 +819,8 @@
     },
     {
       "path": "src/video_translation/execution/adaptive.py",
-      "bytes": 85257,
-      "sha256": "600d4e8b55e112aa4b9c23fece209cb31f6a7918a98edc7e232f10a503d8c74a"
+      "bytes": 86997,
+      "sha256": "ef9654a9bc68148309a1dbdadbcee3fb9c9f6f44c79bea0be806c0a808106422"
     },
     {
       "path": "src/video_translation/execution/adaptive_audio.py",
@@ -854,8 +859,8 @@
     },
     {
       "path": "src/video_translation/execution/clean_contract.py",
-      "bytes": 6879,
-      "sha256": "2ce33ce53fd2d448f51be0f897c7ff302ea77b5735ec484c4f518508ff710fde"
+      "bytes": 7337,
+      "sha256": "9ee6c0a606f13c87ca753f523078c986350c0aba9cc8e7ccaa08b2a0a513d845"
     },
     {
       "path": "src/video_translation/execution/clean_deferrals.py",
@@ -1069,8 +1074,8 @@
     },
     {
       "path": "src/video_translation/execution/viewing_review.py",
-      "bytes": 5048,
-      "sha256": "5fb637c80460f221f72cf88e006005cf4cc1c26c3e66941a3b4773aceb023a57"
+      "bytes": 5068,
+      "sha256": "6145b690b12c1853f0b3b3827db0ae4ca72d6068f700586f040646aeb48ca7d5"
     },
     {
       "path": "src/video_translation/execution/visual_media.py",
@@ -1084,13 +1089,13 @@
     },
     {
       "path": "src/video_translation/execution/work_conclusions.py",
-      "bytes": 3773,
-      "sha256": "3c32c675435bd9d9d6a29bb582fe864ba7b806aa378600d0c54302ed317d81b6"
+      "bytes": 3982,
+      "sha256": "011658310a1884d4789784e2b7fc0fa9449e1f17c7b9ffeddbb869199b872b46"
     },
     {
       "path": "src/video_translation/execution/worker.py",
-      "bytes": 16992,
-      "sha256": "f8ad58e6aec1e99ad95ad58766576f2484f275aa2cfee04f6211abcd68bd46ae"
+      "bytes": 17265,
+      "sha256": "b01da293229da033dc0502b1b18b77ab9a2c50212d22e87a6495eb068ba2b03b"
     },
     {
       "path": "src/video_translation/execution/workspace.py",
@@ -1319,8 +1324,8 @@
     },
     {
       "path": "ui/src/components/AgentActivity.tsx",
-      "bytes": 4565,
-      "sha256": "f50c6a12bca411eaa7bd2845edcd6aa4515461907ea8b60e98cc6da546f46897"
+      "bytes": 4611,
+      "sha256": "02a5d7e753136dc6f3f2f8086c9a950d81525a4d51efa730314f11ab0bd58336"
     },
     {
       "path": "ui/src/components/CapabilityCards.css",
@@ -1409,13 +1414,13 @@
     },
     {
       "path": "ui/src/components/NodeOverview.tsx",
-      "bytes": 7660,
-      "sha256": "14179627d9d53c907884b38f29812d6bf5e12bc52da082870ad15e3f572100cb"
+      "bytes": 7706,
+      "sha256": "66913fec6d83d0e493e8cfcc8af7d40c15d4c2c1c3cf1fdd80cccd6c27994274"
     },
     {
       "path": "ui/src/components/ProductionEvidence.tsx",
-      "bytes": 14709,
-      "sha256": "1324b76c8873f3584f209b710e71e913558bca7be266d9b39ba8416677523b9b"
+      "bytes": 14755,
+      "sha256": "c614fcad0948781561e94e43a9d9cfbedafe0810534963a94927af3758caa7f7"
     },
     {
       "path": "ui/src/components/ProjectArchitecture.css",
@@ -1474,8 +1479,8 @@
     },
     {
       "path": "ui/src/components/cleanWorkflow.ts",
-      "bytes": 9423,
-      "sha256": "2b60b28de865a6387535a79e1ad10dece9f0a0b13b10f90742baa4cc1df9b050"
+      "bytes": 9443,
+      "sha256": "858b65ac9c58738f851608ba851385cf07382eadae3d89c67d8ba48427b5ba4a"
     },
     {
       "path": "ui/src/components/common.tsx",

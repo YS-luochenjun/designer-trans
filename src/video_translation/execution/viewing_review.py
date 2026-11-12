@@ -94,7 +94,7 @@ def guard_candidate_verdict(controller, state, action, frames, policy, policy_re
 def guard_review_only(controller, state, action):
     candidate = state.get("candidate") or {}
     if not candidate.get("quality_reassessment") or action["action"] in {
-            "inspect", "inspect_pipeline", "consult", "accept", "reject_candidate", "blocked", "defer"}:
+            "inspect", "inspect_metadata", "inspect_pipeline", "consult", "accept", "reject_candidate", "blocked", "defer"}:
         return
     state["history"][-1]["tool_error"] = "本次仅复核已保存候选，不授权生成、换候选或修改媒体"
     state["turn"] += 1

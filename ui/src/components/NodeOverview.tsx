@@ -80,7 +80,7 @@ export function NodeOverview({ task, node, notice, onShowCalls }: {
     return ({ inspect: "补充观察", repair: "选择修复方案", accept: "检查并接受候选",
       restore_candidate: "复用已有候选",
       inspect_archive: "检查历史结果", rebase_candidate: "本地重合成", defer: "暂缓该实例",
-      inspect_pipeline: "诊断生成链路", reject_candidate: "拒绝候选",
+      inspect_pipeline: "诊断生成链路", inspect_metadata: "核对候选执行记录", reject_candidate: "拒绝候选",
       revise_scope: "修订范围", consult: "查阅知识", finish: "完成检查", blocked: "报告阻塞" }[action])
       ?? (op.status === "running" ? "正在判断" : "制作判断");
   };

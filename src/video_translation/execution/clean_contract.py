@@ -1,6 +1,6 @@
 """Versioned executor facts supplied independently of frozen model knowledge."""
 
-REVISION = "local-clean-v8-image-pipeline"
+REVISION = "local-clean-v9-candidate-metadata"
 
 
 def execution_contract():
@@ -13,6 +13,12 @@ def execution_contract():
             "and change unproductive methods; keep quality, original requests and storage checks."
         ),
         "ownership": "Work agent proposes inspect/repair/review actions; executor renders and retains evidence.",
+        "candidate_metadata": (
+            "candidate_diagnostics exposes retained edit-eligible CFR bounds and measured differences "
+            "in supplied decoded frames, not text-removal approval. inspect_metadata reads the current "
+            "candidate without requesting sample times. Legacy inspect with empty times, candidate_id "
+            "and evidence has this same read-only meaning; it never infers timestamps or scores."
+        ),
         "pipeline_diagnosis": (
             "inspect_pipeline selects an exact current or archived candidate. image_edit retains "
             "input/generated/conformed PNGs; static images have no video timestamps or frame numbers. "

@@ -83,7 +83,7 @@ class CleanQuality(Contract):
 
 
 class CleanAction(Contract):
-    action: Literal["inspect", "track", "inspect_pipeline", "inspect_archive", "rebase_candidate", "defer", "reject_candidate", "consult", "revise_scope", "confirm_scope", "restore_candidate", "repair", "request_reference", "accept", "finish", "blocked"]
+    action: Literal["inspect", "inspect_metadata", "track", "inspect_pipeline", "inspect_archive", "rebase_candidate", "defer", "reject_candidate", "consult", "revise_scope", "confirm_scope", "restore_candidate", "repair", "request_reference", "accept", "finish", "blocked"]
     reason: str = Field(min_length=1, max_length=2400)
     process_findings: list[str] = Field(default_factory=list, max_length=5)
     source_id: str | None = None
@@ -110,6 +110,15 @@ class CleanAction(Contract):
     tracked_donor: TrackedDonorRepair | None = None
     protected_foreground: list[OcclusionFrame] = Field(default_factory=list, max_length=32)
 
+    @model_validator(mode="before")
+    @classmethod
+    def metadata_only_inspection(cls, value):
+        if (isinstance(value, dict) and value.get("action") == "inspect"
+                and value.get("times_ms", []) == [] and value.get("candidate_id")
+                and value.get("evidence")):
+            return {**value, "action": "inspect_metadata"}
+        return value
+
     @model_validator(mode="after")
     def coherent(self):
         if self.action == "request_reference" and (
@@ -117,6 +126,9 @@ class CleanAction(Contract):
             raise ValueError("Reference request requires source, one observed time, prompt and evidence")
         if self.action == "inspect" and not self.times_ms:
             raise ValueError("检查必须指定实际时间点")
+        if self.action == "inspect_metadata" and (
+                not self.candidate_id or self.times_ms or not self.evidence):
+            raise ValueError("Metadata inspection requires a candidate, evidence and no sample times")
         if self.action == "repair" and (not self.source_id or not self.method):
             raise ValueError("修复必须绑定文字实例及工具")
         if self.action == "repair" and self.method == "reference_plate" and not self.reference_id:

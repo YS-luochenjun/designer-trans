@@ -290,6 +290,7 @@ class AdaptiveProduction:
 
     def capabilities(self):
         tools = {'inspect': '按原片时间查看原片和当前候选的真实帧',
+                 'inspect_metadata': '只读当前candidate_id的已保存执行范围及采样像素差异，不请求新抽帧、不改变候选或质量。times_ms必须为空并填写evidence；旧inspect空时间且绑定candidate_id/evidence具有相同含义',
                  'inspect_archive': '按historical_candidates的ID只读检查历史候选（包括旧基底或已拒绝候选），不恢复、不生成；没有链路文件时比较原片/当前底片/历史候选',
                  'rebase_candidate': '将已检查、未拒绝的历史候选局部重贴到当前底片；旧基底必须在接受链且后续修复无时空重叠；生成新候选重新验收，不调用外部模型',
                  'defer': '用start_ms/end_ms暂缓有证据的困难短段，其他actionable_intervals_ms继续；省略起止表示整个实例暂缓，须有全段依据；暂缓不算完成',
@@ -435,6 +436,8 @@ class AdaptiveProduction:
                     '路由结论：' + (state.get('routing_stop') or {}).get('reason', '当前证据与已处理请求相同') +
                     '保留清底工作版和接受结果；明确补充方法/证据后再逐实例解除暂缓，暂不叠加译文。')
             turn = state['turn']
+            from ..application.retained_clean_checks import verify_replay
+            verify_replay(self, state)
             base = self.verified(state['base'])
             comparison = self.verified(state['candidate']) if state['candidate'] else base
             if state['candidate'] and not state.get('archive_review') and not state.get('pipeline_review'):
@@ -468,6 +471,13 @@ class AdaptiveProduction:
                     frames, archive_changes = retained_archive_evidence(
                         self, state, archived_review, turn, archive_clock)
             archive_diagnostics = None
+            current_diagnostics = None
+            if state.get('candidate') and not pipeline_review and not archived_review:
+                _, candidate_clock = self.media._info(self.source)
+                current_diagnostics = candidate_diagnostics(state['candidate'], candidate_clock)
+                current_diagnostics['sampled_pixel_changes'] = sampled_candidate_changes(
+                    state['candidate'], state['base']['sha256'], frames,
+                    baseline_label='修复前底片', candidate_label='当前局部修复候选')
             if archived_review:
                 _, archive_clock = self.media._info(self.source)
                 archive_diagnostics = candidate_diagnostics(archived_review, archive_clock)
@@ -479,7 +489,8 @@ class AdaptiveProduction:
             saved = [r for r in self.store.list('production_decision')
                      if r.get('task_id') == self.task['id'] and r.get('node_id') == self.node['id']
                      and r.get('key') == f'clean-{turn}' and r.get('status') == 'succeeded'
-                     and (self.node.get('external_pending') or state.get('pending_turn') == turn)]
+                     and (self.node.get('external_pending') or state.get('pending_turn') == turn
+                          or (state.get('retained_check') or {}).get('decision_id') == r['id'])]
             if len(saved) > 1:
                 raise Conflict('同一制作轮存在多个决策，请核对后恢复')
             from .context_history import retain_context_history
@@ -538,6 +549,7 @@ class AdaptiveProduction:
                 'historical_candidates': archive_summary(state),
                 'archive_under_review': archived_review['id'] if archived_review else None,
                 'archive_diagnostics': archive_diagnostics,
+                'candidate_diagnostics': current_diagnostics,
                 'kie_budget': self.budget_snapshot(),
                 'reusable_candidates': [{k: v for k, v in candidate.items() if k != 'path'}
                     for candidate in state.get('candidate_archive', [])
@@ -707,6 +719,13 @@ class AdaptiveProduction:
                 state.setdefault('tracking_reports', []).append(cached)
                 state['times_ms'] = sorted(set([action['start_ms'], action['end_ms'] - 1]
                                                + [int(r['sampled_time_ms']) for r in cached['frames'][::max(1, len(cached['frames']) // 6)]]))[:8]
+            elif action['action'] == 'inspect_metadata':
+                if not state.get('candidate') or state['candidate']['id'] != action['candidate_id']:
+                    raise ValueError('Metadata inspection must bind the current candidate')
+                state['history'][-1]['metadata_inspection'] = {
+                    'candidate_id': action['candidate_id'],
+                    'candidate_sha256': state['candidate']['sha256'],
+                    'new_frames_requested': False, 'quality_passed': False}
             elif action['action'] == 'inspect':
                 from .inspection_evidence import allow_reattachment, window_key
                 times = action['times_ms']
@@ -865,7 +884,9 @@ class AdaptiveProduction:
                    base_sha256=state['history'][-1]['input_base_sha256'],
                    frames=frames, tool_error=state['history'][-1].get('tool_error'))
             state['turn'] += 1
-            self.store.put('production_session', state)
+            from ..application.retained_clean_checks import finish_replay
+            if not finish_replay(self, state, turn):
+                self.store.put('production_session', state)
             if action['action'] == 'accept':
                 record_local_experience(self.store, state, self.texts)
             self.service.write_json(self.task['id'], self.node, 'production-session.json', state)

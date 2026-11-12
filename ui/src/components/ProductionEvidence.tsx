@@ -4,7 +4,7 @@ import { Empty, ErrorBox, JsonView, Status } from "./common";
 import { Select } from "./Select";
 
 const methodNames: Record<string, string> = { local_surface: "逐帧局部补底", flat: "均匀背景修复", donor: "同源帧补底", image_edit: "图片局部编辑", wan: "视频局部编辑" };
-const actionNames: Record<string, string> = { confirm_scope: "确认已接受区间的范围复核", inspect_archive: "检查历史结果", rebase_candidate: "本地重合成", defer: "暂缓该实例", inspect_pipeline: "诊断生成链路", reject_candidate: "拒绝候选", restore_candidate: "复用已有候选", inspect: "补充观察", revise_scope: "修订文字范围", repair: "局部修复", accept: "接受候选", finish: "完成清底", blocked: "等待处理", revise: "局部修订" };
+const actionNames: Record<string, string> = { confirm_scope: "确认已接受区间的范围复核", inspect_archive: "检查历史结果", rebase_candidate: "本地重合成", defer: "暂缓该实例", inspect_pipeline: "诊断生成链路", inspect_metadata: "核对候选执行记录", reject_candidate: "拒绝候选", restore_candidate: "复用已有候选", inspect: "补充观察", revise_scope: "修订文字范围", repair: "局部修复", accept: "接受候选", finish: "完成清底", blocked: "等待处理", revise: "局部修订" };
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const records = (value: unknown) => Array.isArray(value) ? value.map(record) : [];
 const text = (value: unknown) => typeof value === "string" ? value : typeof value === "number" ? String(value) : "";

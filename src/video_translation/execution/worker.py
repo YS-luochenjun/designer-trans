@@ -146,6 +146,11 @@ class Worker:
                 break
             if task["id"] in self.route_futures or self.store.get("deletion_receipt", task["id"]):
                 continue
+            future = self.futures.get(task["id"])
+            if future is None or future.done():
+                from video_translation.application.retained_clean_checks import reconcile
+                if reconcile(self.service, task["id"]):
+                    continue
             reconcile_work_reports(self.service, task["id"])
             message = self.service.collaboration.pending(task["id"], interaction="route")
             event = (not task.get("control_paused") and task["status"] not in {"cancelled", "completed"}

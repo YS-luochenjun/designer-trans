@@ -5,7 +5,7 @@ import { ErrorBox, JsonView, Status } from "./common";
 const actions: Record<string, string> = {
   inspect_archive: "检查历史结果", rebase_candidate: "本地重合成", defer: "暂缓该实例",
   restore_candidate: "复用已有候选",
-  inspect_pipeline: "诊断生成链路", reject_candidate: "拒绝候选并保留证据",
+  inspect_pipeline: "诊断生成链路", inspect_metadata: "核对候选执行记录", reject_candidate: "拒绝候选并保留证据",
   inspect: "补帧观察", revise_scope: "修订文字范围", consult: "查阅方法", repair: "局部修复", accept: "确认候选",
   finish: "完成判断", revise: "局部修订", blocked: "能力不足", clarify: "需要补充",
 };

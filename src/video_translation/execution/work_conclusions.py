@@ -15,10 +15,13 @@ def retain(state, action, *, turn, base_sha256, frames, role="work", tool_error=
         "findings": [text[:300] for text in action.get("process_findings", [])[:2]],
         "evidence": [text[:240] for text in action.get("evidence", [])[:2]],
         "full_details": "Original decision and retained history; this is a bounded summary",
-        "observed_frames": sorted({f["frame_index"] for f in frames}),
+        "observed_frames": sorted({f["frame_index"] for f in frames if "frame_index" in f}),
         "tool_error": tool_error,
         "scope": "Task-local process evidence; no automatic quality verdict or knowledge publication",
     }
+    stills = [f["path"] for f in frames if f.get("kind") in {"still_pipeline", "generated_reference"}]
+    if stills:
+        value["observed_still_images"] = list(dict.fromkeys(stills))
     key = fingerprint(value)
     ledger = state.setdefault("work_conclusions", {})
     ledger.setdefault(key, {"id": key, **deepcopy(value)})

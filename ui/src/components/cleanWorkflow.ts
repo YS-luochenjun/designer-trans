@@ -47,7 +47,7 @@ export function cleanWorkflow(parent: TaskNode, session?: ProductionSession) {
   const action = String(last?.action ?? "");
   const method = String(last?.method ?? "");
   let current = "inventory";
-  if (session) current = ["inspect", "inspect_pipeline", "inspect_archive", "revise_scope", "consult", "track", "confirm_scope"].includes(action) ? "inspect"
+  if (session) current = ["inspect", "inspect_metadata", "inspect_pipeline", "inspect_archive", "revise_scope", "consult", "track", "confirm_scope"].includes(action) ? "inspect"
     : action === "accept" ? "coverage" : action === "finish" ? "review"
     : session.candidate ? "compare" : "choose";
   if (parent.status === "waiting_external" && action === "repair") {
