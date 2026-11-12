@@ -75,16 +75,23 @@ def configure(service, task_id, request: RouteAutonomy):
                 or len(sessions) != 1 or store.get("deletion_receipt", task_id)):
             raise Conflict("Route delegation requires an existing active Codex clean session")
         state = sessions[0]
-        base = Path(state["base"]["path"])
-        root = (service.settings.runtime / "tasks" / task_id).resolve()
-        if (base.is_symlink() or not base.resolve().is_relative_to(root) or not base.is_file()
-                or state["base"]["sha256"] != request.expected_base_sha256
-                or service.hash_file(base) != request.expected_base_sha256):
-            raise Conflict("Current base changed; inspect before delegating Route recovery")
+        from .clean_base import verified_clean_base
+        verified_clean_base(service, task, state, request.expected_base_sha256, store=store)
         previous = store.get("route_policy", task_id)
         value = request.model_dump()
         if previous and all(previous.get(k) == v for k, v in value.items()):
             return previous
+        if previous and all(previous.get(k) == v for k, v in value.items()
+                            if k not in {"recover_production_route", "expected_base_sha256"}):
+            # Adding planner recovery must not renew spent Work authority or cooldowns.
+            policy = {**previous, **value}
+            store.put("route_policy_extension", {
+                "id": identifier(), "task_id": task_id, "at": now(),
+                "authorization_id": previous["authorization_id"],
+                "recover_production_route": value["recover_production_route"],
+            })
+            store.put("route_policy", policy)
+            return policy
         policy = {
             "id": task_id, "task_id": task_id, **value, "node_id": state["node_id"],
             "authorization_id": identifier(), "created_at": now(), "authority": "user_delegated",
@@ -159,11 +166,12 @@ class RouteRecovery:
             n["id"] == policy["node_id"] and n["status"] not in {"succeeded", "skipped", "cancelled"}
             for n in task["nodes"]))
 
-    def _status(self, task_id, status, reason):
+    def _status(self, task_id, status, reason, **evidence):
         old = self.store.get("route_status", task_id)
-        if not old or (old.get("status"), old.get("reason")) != (status, reason):
+        current = {"status": status, "reason": reason, **evidence}
+        if not old or any(old.get(k) != v for k, v in current.items()):
             self.store.put("route_status", {"id": task_id, "task_id": task_id,
-                                           "status": status, "reason": reason, "created_at": now()})
+                                           **current, "created_at": now()})
 
     def process_one(self):
         for policy in self.store.list("route_policy"):
@@ -172,10 +180,72 @@ class RouteRecovery:
                     or task["status"] in {"cancelled", "completed"}):
                 continue
             from ..execution.convergence import ERROR as CONVERGENCE_ERROR
+            from .clean_route_recovery import SESSION_ERROR, requeue_predispatch
+            from .materialization_recovery import ERROR as MATERIALIZATION_ERROR
+            if any(n["id"] == policy["node_id"] and n["status"] == "failed"
+                   and n.get("error") == MATERIALIZATION_ERROR for n in task["nodes"]):
+                try:
+                    from .materialization_recovery import schedule as schedule_materialization
+                    with self.guard(task["id"]), self.store.connection() as db:
+                        store = TransactionStore(self.store, db)
+                        resumed = schedule_materialization(
+                            TaskService(self.service.settings, store), store.require("task", task["id"]))
+                    if resumed:
+                        self._status(task["id"], "working",
+                                     "Verified truncated audio tail; one local output scheduled.")
+                        return True
+                except (Conflict, OSError, ValueError, KeyError, RuntimeError) as exc:
+                    self._status(task["id"], "needs_attention", str(exc)[:1500],
+                                 original_kind="materialization")
+                continue
             if not any(n["id"] == policy["node_id"] and (
                     n["status"] == "unknown" or n["status"] == "failed" and (
                         policy.get("recover_observation_context")
-                        or n.get("error") == CONVERGENCE_ERROR)) for n in task["nodes"]):
+                        or n.get("error") == CONVERGENCE_ERROR
+                        or policy.get("recover_production_route")
+                        and n.get("error") == SESSION_ERROR)) for n in task["nodes"]):
+                continue
+            if any(n["id"] == policy["node_id"] and n["status"] == "failed"
+                   and n.get("error") == SESSION_ERROR for n in task["nodes"]):
+                try:
+                    with self.guard(task["id"]), self.store.connection() as db:
+                        store = TransactionStore(self.store, db)
+                        resumed = requeue_predispatch(TaskService(self.service.settings, store),
+                                                     store.require("task", task["id"]))
+                    if resumed:
+                        self._status(task["id"], "working",
+                                     "Verified local checkpoint; same unreserved plan scheduled.")
+                        return True
+                except (Conflict, OSError, ValueError, KeyError) as exc:
+                    self._status(task["id"], "needs_attention", str(exc)[:1500],
+                                 original_kind="clean_route")
+                continue
+            from .clean_route_incident import diagnostic
+            try:
+                with self.guard(task["id"]):
+                    task = self.store.require("task", task["id"])
+                    if (task.get("control_paused") or task["status"] in {"cancelled", "completed"}
+                            or not any(n["id"] == policy["node_id"] and n["status"] in {"failed", "unknown"}
+                                       for n in task["nodes"])):
+                        continue
+                    incident = diagnostic(self.service, task)
+            except Conflict:
+                # Task Route and Work own their current turn; recovery waits without dispatching.
+                continue
+            if incident:
+                if policy.get("recover_production_route"):
+                    from .clean_route_recovery import schedule
+                    try:
+                        with self.guard(task["id"]), self.store.connection() as db:
+                            store = TransactionStore(self.store, db)
+                            schedule(TaskService(self.service.settings, store),
+                                     store.require("task", task["id"]), incident)
+                        self._status(task["id"], "working",
+                                     "Original planner retained; one independent plan scheduled.")
+                        return True
+                    except (Conflict, OSError, ValueError, KeyError) as exc:
+                        incident["reason"] = str(exc)[:1500]
+                self._status(task["id"], "needs_attention", **incident)
                 continue
             runs = sorted([r for r in self.store.list("route_run") if r["task_id"] == task["id"]],
                           key=lambda r: r["created_at"], reverse=True)
@@ -184,6 +254,14 @@ class RouteRecovery:
             if decided:
                 self._apply(decided)
                 return True
+            from ..execution.resource_budget import guard_external_call, guard_recovery_call, guard_storage
+            try:
+                guard_external_call(task)
+                guard_recovery_call(self.store, task)
+                guard_storage(self.service, task)
+            except Conflict as exc:
+                self._status(task["id"], "resource_blocked", str(exc))
+                continue
             current = datetime.now(timezone.utc)
             if any(r["status"] in {"running", "verifying"} for r in runs):
                 continue
@@ -217,6 +295,10 @@ class RouteRecovery:
         return False
 
     def _decide(self, task, policy, context, previous):
+        from ..execution.resource_budget import guard_external_call, guard_recovery_call, guard_storage
+        guard_external_call(task)
+        guard_recovery_call(self.store, task)
+        guard_storage(self.service, task)
         run_id = identifier()
         packet = {
             "instruction": INSTRUCTION, "agent_role": "route", "decision_id": run_id,
@@ -245,6 +327,9 @@ class RouteRecovery:
                "model": task.get("model_snapshot", {}).get("agent_model"), "decision": None}
         with self.guard(task["id"]), self.store.connection() as db:
             store = TransactionStore(self.store, db)
+            guard_external_call(store.require("task", task["id"]))
+            guard_recovery_call(store, store.require("task", task["id"]))
+            guard_storage(self.service, store.require("task", task["id"]))
             current_policy = store.require("route_policy", task["id"])
             if not current_policy["enabled"] or current_policy["authorization_id"] != policy["authorization_id"]:
                 return
@@ -369,6 +454,10 @@ class RouteRecovery:
                 if any(p["task_id"] == task["id"] and p.get("contract_signature") == signature
                        for p in store.list("route_probe")):
                     raise Conflict("This base/schema diagnostic is already reserved; no repeat call")
+                from ..execution.resource_budget import guard_external_call, guard_recovery_call, guard_storage
+                guard_external_call(task)
+                guard_recovery_call(store, task)
+                guard_storage(service, task)
                 settings_record = store.get("manager_settings", "project")
                 config = ManagerSettings.model_validate(
                     settings_record["value"] if settings_record else {}).model_dump()

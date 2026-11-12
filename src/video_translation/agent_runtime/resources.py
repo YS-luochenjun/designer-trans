@@ -82,6 +82,7 @@ class ResourceCatalog:
     def packet(self, task: dict, node: dict, inputs: dict, schema: dict) -> dict:
         from video_translation.application.collaboration import instructions_for
         from .production_context import production_context
+        from .packet_context import compact_clean_inputs, node_work_order
         scoped = self._scoped(task, node)
         entries = scoped
         if inputs.get("resource_mode") == "on_demand":
@@ -103,6 +104,14 @@ class ResourceCatalog:
                 "制作结果须保存并经项目登记与审阅，不能直接改库或虚构接受。"
                 "图片请求由项目自身Codex执行环节完成，不等待开发者聊天。"
                 "外部收费仍通过项目统一预算，暂停取消与未知请求去重继续有效。"
+                "resource_limits存在时，所有工具与子任务共享该资源约束；"
+                "不得将额外文件写到其他目录或自行收费来绕过，无法有界完成时返回阻塞原因。"
+                "按连续文字问题完成工作，不把每一帧变成一次模型调用；先复用work_conclusions与已存观察。"
+                "route_work_order.execution_scope区分诊断与执行：execute_and_review允许在同份工单中"
+                "补充观察、选择allowed_repair_methods中的方法、提交修复并复核，不必再向用户索要技术批准。"
+                "generation_authorized=false仅禁止未分派的收费生成，不禁止本地工具执行。"
+                "图片数量上限是单次传输限制；inspect_archive的times_ms是原片绝对时间，"
+                "每次最多6点，指定的帧必须实际返回，不能用默认窗口冒充。"
             )
         index_fields = ("id", "name", "kind", "version", "description", "sha256")
         return {
@@ -112,12 +121,14 @@ class ResourceCatalog:
             "stage": node["definition_id"],
             "locale": node["locale"],
             "notes": task["notes"],
-            "production_context": production_context(task),
+            "production_context": production_context(task, node),
+            "node_work_order": node_work_order(task, node),
             "confirmed_node_instructions": instructions_for(task, node),
             "brief_revision": task.get("brief_revision", 0),
             "source_language": task["source_language"],
+            "resource_limits": task.get("execution_snapshot", {}).get("resource_budget"),
             "instruction": prompt,
-            "inputs": inputs,
+            "inputs": compact_clean_inputs(inputs, can_read_history=autonomous_work),
             "output_schema": schema,
             "resource_versions": [{k: entry[k] for k in ("id", "version", "sha256")} for entry in entries],
             "resource_index": [{key: deepcopy(entry[key]) for key in index_fields} for entry in scoped],

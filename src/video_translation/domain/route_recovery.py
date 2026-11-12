@@ -13,6 +13,7 @@ class RouteAutonomy(BaseModel):
     cooldown_seconds: int = Field(default=30, ge=15, le=1800)
     diagnose_request_rejections: bool = False
     recover_observation_context: bool = False
+    recover_production_route: bool = False
 
 
 class RouteRecoveryDecision(BaseModel):

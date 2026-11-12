@@ -127,7 +127,10 @@ class DirectedRework:
                 max_revisions=0)
             branch = TaskService(self.service.settings, store).create(TaskCreate(**fields), source="directed_rework")
             branch = store.require("task", branch["id"])
+            fresh_budget = deepcopy(branch["execution_snapshot"]["resource_budget"])
             branch.update(deepcopy(basis["snapshots"]))
+            if not branch["execution_snapshot"].get("resource_budget"):
+                branch["execution_snapshot"]["resource_budget"] = fresh_budget
             branch["nodes"] = instantiate(task["workflow"], [node["asset_id"]], [request.locale])
             for fresh in branch["nodes"]:
                 original = next(n for n in selected if n["definition_id"] == fresh["definition_id"]

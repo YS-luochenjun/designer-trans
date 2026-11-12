@@ -19,6 +19,8 @@ class ManagerSettings(ManagementContract):
 class ManagerMessage(ManagementContract):
     request_id: UUID
     text: str = Field(min_length=1, max_length=4000)
+    intent: Literal["discussion", "storage", "cleanup_plan", "knowledge_summary"] = "discussion"
+    task_id: str | None = Field(default=None, pattern=r"^[a-fA-F0-9]{32}$")
 
     @field_validator("text")
     @classmethod

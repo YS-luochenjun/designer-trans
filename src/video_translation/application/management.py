@@ -89,6 +89,16 @@ class ProjectManager:
         return event
 
     def message(self, request):
+        from .project_maintenance import maintenance_intent
+        parsed = ({"intent": request.intent, "task_id": request.task_id}
+                  if request.intent != "discussion" else maintenance_intent(request.text))
+        if parsed:
+            if parsed.get("ambiguous"):
+                raise Conflict("维护查询每次只处理一个明确任务")
+            return self.enqueue("maintenance", {
+                "text": request.text, "intent": parsed["intent"],
+                "task_id": request.task_id or parsed.get("task_id"),
+            }, request.request_id.hex)
         return self.enqueue("message", {"text": request.text}, request.request_id.hex)
 
     def scan(self):
@@ -101,9 +111,13 @@ class ProjectManager:
                 continue
             if self.route_recovery.manages(task):
                 continue
+            from .observation_route_handoff import route_owned_nodes
+            owned = route_owned_nodes(self.store, task["id"])
+            owned.update(e["node_id"] for e in self.store.list("task_route_event")
+                         if e["task_id"] == task["id"] and e["status"] not in {"acknowledged", "superseded"})
             problems = [n for n in task["nodes"] if n["status"] in {
                 "failed", "unknown", "interrupted", "waiting_user",
-            }]
+            } and n["id"] not in owned]
             progress = self._progress(task)
             progress_id = "progress-" + task["id"]
             with self.store.lock:
@@ -114,7 +128,8 @@ class ProjectManager:
                         "progress_at": now(),
                     })
             stalled = (not task.get("control_paused") and
-                       any(n["status"] in {"running", "waiting_external"} for n in task["nodes"]) and
+                       any(n["status"] in {"running", "waiting_external"} and n["id"] not in owned
+                           for n in task["nodes"]) and
                        datetime.now(timezone.utc) - datetime.fromisoformat(last["progress_at"]) >
                        timedelta(minutes=config["stall_minutes"]))
             if not problems and not stalled:
@@ -352,6 +367,28 @@ class ProjectManager:
 
     def _decide(self, event):
         self.store.update("manager_event", event["id"], lambda r: r.update(status="running"))
+        if event["kind"] in {"task_attention", "task_stalled"}:
+            from .observation_route_handoff import route_owned_nodes
+            task_id = event["payload"].get("task_id")
+            task = self.store.get("task", task_id) if task_id else None
+            owned = route_owned_nodes(self.store, task_id) if task else set()
+            owned.update(e["node_id"] for e in self.store.list("task_route_event")
+                         if e["task_id"] == task_id and e["status"] not in {"acknowledged", "superseded"})
+            if owned and all(n["id"] in owned for n in task["nodes"] if n["status"] in {
+                    "failed", "unknown", "interrupted", "waiting_user", "running", "waiting_external"}):
+                self.store.update("manager_event", event["id"], lambda r: r.update(
+                    status="succeeded", reply="任务 Route 已接管该节点；技术问题保留内部处理，不重复向用户提问。",
+                    finished_at=now()))
+                return
+        if event["kind"] == "maintenance":
+            from .project_maintenance import ProjectMaintenance
+            result = ProjectMaintenance(self.tasks).query(
+                event["payload"]["intent"], event["payload"].get("task_id"))
+            self.store.update("manager_event", event["id"], lambda row: row.update(
+                status="succeeded", reply=result["reply"], maintenance_result=result,
+                decision={"reply": result["reply"], "question": None, "actions": []},
+                finished_at=now()))
+            return
         if event["kind"] == "requirement_found":
             # Drain legacy queued discoveries without consuming the model budget.
             self.store.update("manager_event", event["id"], lambda r: r.update(

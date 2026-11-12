@@ -17,7 +17,7 @@ import time
 from PIL import Image, ImageChops
 
 from video_translation.domain.execution import ExecutionProfile, FileRef, FramePatch, PatchManifest, identity
-from .frame_clock import sample_index
+from .frame_clock import frame_window, sample_index
 from .media import MediaError
 from .visual_media import VisualMedia
 from .workspace import ExecutionWorkspace, file_sha, publish_json
@@ -109,6 +109,22 @@ class EfficientVisualMedia(VisualMedia):
         with super()._decoded(root, checked) as frames:
             yield (self._apply(image, by_index.get(index, ())) for index, image in enumerate(frames))
 
+    @contextmanager
+    def _decoded_window(self, source, info, first, stop):
+        if not self.is_manifest(source):
+            with super()._decoded_window(source, info, first, stop) as frames:
+                yield frames
+            return
+        root, checked, layers = self._chain(source)
+        by_index = {}
+        for layer in layers:
+            for patch in layer.patches:
+                if first <= patch.frame_index < stop:
+                    by_index.setdefault(patch.frame_index, []).append(patch)
+        with super()._decoded_window(root, checked, first, stop) as frames:
+            yield (self._apply(image, by_index.get(index, ()))
+                   for index, image in enumerate(frames, start=first))
+
     def _still_frame(self, source, info, index, target):
         if not self.is_manifest(source):
             return super()._still_frame(source, info, index, target)
@@ -173,7 +189,18 @@ class EfficientVisualMedia(VisualMedia):
         target.parent.mkdir(parents=True, exist_ok=True)
         return target
 
-    def _render(self, source, target, info, transform, *, output_limit=None):
+    def _render_window(self, source, target, info, transform, start_ms, end_ms):
+        first, stop = frame_window(start_ms, end_ms, info["rate"])
+        # Rounded container milliseconds can extend beyond the last native frame.
+        return self._render(source, target, info, transform,
+                            frame_range=(first, min(stop, info["frames"])))
+
+    def _render(self, source, target, info, transform, *, output_limit=None, frame_range=None):
+        with self.workspace.local_write():
+            return self._render_serial(source, target, info, transform,
+                                       output_limit=output_limit, frame_range=frame_range)
+
+    def _render_serial(self, source, target, info, transform, *, output_limit=None, frame_range=None):
         if not self.is_manifest(target):
             self.workspace.preflight(target, min(self.MAX_OUTPUT_BYTES,
                                                 info["width"] * info["height"] * 3 * info["frames"]))
@@ -183,19 +210,27 @@ class EfficientVisualMedia(VisualMedia):
                 return result
         if self.is_manifest(source) and len(self._chain(source)[2]) >= self.CHECKPOINT_DEPTH:
             source, _ = self.checkpoint(source)
+        first, stop = frame_range if frame_range is not None else (0, info["frames"])
+        if (type(first) is not int or type(stop) is not int
+                or not 0 <= first < stop <= info["frames"]):
+            raise ValueError("Sparse edit has no native frames or exceeds the source")
         target = self._target(source, target)
         before = file_sha(source)
         limit = min(self.MAX_OUTPUT_BYTES, self.media.max_source_bytes,
                     output_limit if output_limit is not None else self.MAX_OUTPUT_BYTES)
-        self.workspace.preflight(target, min(self.MAX_OUTPUT_BYTES,
-                                            info["width"] * info["height"] * 3 * info["frames"]))
+        self.workspace.preflight(target, min(limit, 2 * 1024**2 + (stop - first) * (
+            info["width"] * info["height"] * 3 + 64 * 1024)))
         assets = target.with_suffix(".frames")
         patches, total = [], 0
-        with self.workspace.measure("patch") as metric, TemporaryDirectory(
+        with self.workspace.measure("patch", source_frames=info["frames"],
+                                    eligible_frames=stop - first, transferred_frames=0) as metric, TemporaryDirectory(
                 prefix="patch-", dir=target.parent) as scratch:
             started = time.monotonic()
-            with self._decoded(source, info) as frames:
-                for index, image in enumerate(frames):
+            reader = (self._decoded(source, info) if frame_range is None
+                      else self._decoded_window(source, info, first, stop))
+            with reader as frames:
+                for index, image in enumerate(frames, start=first):
+                    metric["transferred_frames"] += 1
                     original = image.copy()
                     transform(image, index * 1000 / info["fps"])
                     rectangle = ImageChops.difference(original, image).getbbox()
@@ -211,6 +246,10 @@ class EfficientVisualMedia(VisualMedia):
                         raise MediaError("Sparse edit exceeded timeout")
             if file_sha(source) != before:
                 raise MediaError("Base changed during sparse editing")
+            if metric["transferred_frames"] != stop - first:
+                raise MediaError("Sparse decoder returned an incomplete native frame window")
+            if self.is_manifest(source):
+                self._chain(source)
             manifest = PatchManifest(base=FileRef(path=str(Path(source).resolve()), sha256=before),
                 width=info["width"], height=info["height"], frames=info["frames"],
                 rate=info["rate"], patches=patches)

@@ -1,5 +1,6 @@
 """Explicit admission, branch rework and local artifact lifecycle controls."""
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,6 +45,48 @@ class RepresentationPreview(Body):
     expected_base_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class OutputGoal(Body):
+    goal: Literal["complete_candidate", "quality_approved"]
+    expected_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class CallBudgetIncrease(Body):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_limit: int = Field(ge=0, le=10_000)
+    new_limit: int = Field(gt=0, le=10_000)
+    reason: str = Field(min_length=1, max_length=2400)
+
+
+class SupervisionBudgetIncrease(Body):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_recovery_limit: int = Field(ge=0, le=1000)
+    new_recovery_limit: int = Field(ge=0, le=1000)
+    expected_revision_limit: int = Field(ge=0, le=3)
+    new_revision_limit: int = Field(ge=0, le=3)
+    reason: str = Field(min_length=1, max_length=2400)
+
+
+class CleanExecutionAuthorization(Body):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    request_id: str = Field(min_length=1, max_length=100)
+    node_id: str
+    session_id: str
+    expected_attempt: int = Field(ge=0)
+    expected_revision: int = Field(ge=0)
+    expected_turn: int = Field(ge=0)
+    expected_base_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    expected_clean_limit: int = Field(ge=0, le=10_000)
+    additional_turns: int = Field(ge=1, le=48)
+    reason: str = Field(min_length=1, max_length=2400)
+
+
+class CleanStageReset(Body):
+    request_id: str = Field(min_length=1, max_length=100)
+    node_id: str
+    expected_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason: str = Field(min_length=1, max_length=2400)
+
+
 class FollowUp(Body):
     expected_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
     owner: str = Field(min_length=1, max_length=100)
@@ -56,6 +99,69 @@ def advanced_routes(service, worker, manager):
     router = APIRouter(prefix="/api")
     policies = manager.policy_intake
     rework = DirectedRework(service)
+
+    @router.put("/tasks/{task_id}/call-budget")
+    def increase_call_budget(task_id: str, body: CallBudgetIncrease):
+        from video_translation.application.task_call_budget import increase
+        with worker.guard(task_id):
+            return increase(service, task_id, body.expected_limit, body.new_limit, body.reason)
+
+    @router.put("/tasks/{task_id}/supervision-budget")
+    def increase_supervision_budget(task_id: str, body: SupervisionBudgetIncrease):
+        from video_translation.application.task_supervision_budget import increase
+        with worker.guard(task_id):
+            return increase(service, task_id, **body.model_dump())
+
+    @router.post("/tasks/{task_id}/clean-execution-authorization")
+    def authorize_clean_execution(task_id: str, body: CleanExecutionAuthorization):
+        from video_translation.application.clean_execution_authorization import authorize
+        with worker.guard(task_id):
+            return authorize(service, task_id, body)
+
+    @router.get("/tasks/{task_id}/clean-stage-reset")
+    def preview_clean_reset(task_id: str, node_id: str):
+        from video_translation.application.clean_stage_reset import preview
+        with worker.guard(task_id):
+            return preview(service, task_id, node_id)
+
+    @router.post("/tasks/{task_id}/clean-stage-reset")
+    def reset_clean_stage(task_id: str, body: CleanStageReset):
+        from video_translation.application.clean_stage_reset import apply
+        with worker.guard(task_id):
+            return apply(service, task_id, body)
+
+    @router.get("/tasks/{task_id}/clean-stage-resets/{request_id}")
+    def clean_reset_receipt(task_id: str, request_id: str):
+        return service.store.require("clean_stage_reset", identity({
+            "task_id": task_id, "request_id": request_id}))
+
+    @router.get("/tasks/{task_id}/output-goal")
+    def output_goal_context(task_id: str):
+        from video_translation.application.output_goal import context
+        return context(service, task_id)
+
+    @router.put("/tasks/{task_id}/output-goal")
+    def output_goal(task_id: str, body: OutputGoal):
+        from video_translation.application.output_goal import change
+        with worker.guard(task_id):
+            return change(service, task_id, body.goal, body.expected_basis)
+
+    from video_translation.application.work_handoffs import (
+        HandoffRequest, handoff_basis, handoffs_for, publish_handoff,
+    )
+
+    @router.get("/tasks/{task_id}/work-handoffs/{target_node_id}")
+    def handoffs(task_id: str, target_node_id: str):
+        return handoffs_for(service, task_id, target_node_id)
+
+    @router.get("/tasks/{task_id}/work-handoff-basis/{source_node_id}/{target_node_id}")
+    def handoff_version(task_id: str, source_node_id: str, target_node_id: str):
+        return {"basis_sha256": handoff_basis(
+            service.store.require("task", task_id), source_node_id, target_node_id)}
+
+    @router.post("/tasks/{task_id}/work-handoffs")
+    def publish_work_handoff(task_id: str, body: HandoffRequest):
+        return publish_handoff(service, task_id, body)
 
     @router.get("/intake-policies")
     def list_policies():

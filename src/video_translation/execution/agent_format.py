@@ -38,6 +38,9 @@ def run_agent(executor, agent, task, node, packet, schema, directory):
                 and packet.get("inputs", {}).get("agent_role") == "work")
     if not eligible:
         def run():
+            if node.get("clean_route_recovery_id"):
+                from video_translation.application.clean_route_recovery import before_model_call as check_route
+                check_route(executor.service, task, node, decision_id, packet.get("inputs", {}))
             if node["definition_id"] == "visual" and node.get("visual_recovery_authorization_id"):
                 from video_translation.application.visual_recovery import before_model_call
                 before_model_call(executor.service, task, node, decision_id)

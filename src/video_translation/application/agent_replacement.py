@@ -131,11 +131,11 @@ def _authorize_replacement(service, task_id, expected_decision_id, expected_base
                        for op in service.store.list("operation"))):
             raise Conflict("An external operation or unknown image still needs reconciliation")
     root = (service.settings.runtime / "tasks" / task_id).resolve()
-    base = Path(state["base"]["path"])
+    from .clean_base import verified_clean_base
+    verified_clean_base(service, task, state, expected_base_sha256)
     recovery = root / "nodes" / node["id"] / str(node["attempt"]) / (decision["id"][:20] + "-codex-recovery")
     answer = recovery / "answer.json"
-    if (base.is_symlink() or not base.resolve().is_relative_to(root) or not base.is_file()
-            or service.hash_file(base) != expected_base_sha256 or recovery.is_symlink()
+    if (recovery.is_symlink()
             or not recovery.resolve().is_relative_to(root)):
         raise Conflict("Retained base or original recovery directory is missing/changed")
     for path in (recovery / "request.json", recovery / "receipt.json"):

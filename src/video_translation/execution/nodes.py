@@ -100,12 +100,21 @@ class NodeExecutor:
         return self.sibling(task, node, definition)["output"]
 
     def paid(self, task, node, provider, kind, action, *, allow_inactive=False):
+        from .resource_budget import guard_external_call, guard_storage
+        current = self.store.require("task", task["id"])
+        guard_external_call(current)
+        guard_storage(self.service, current)
+
         def reserve(current):
             if current["status"] == "cancelled" and not (allow_inactive and kind == "discussion"):
                 raise Conflict("任务已取消")
+            if current.get("control_paused") and not (allow_inactive and kind == "discussion"):
+                from .task_route import TaskRoutePaused
+                raise TaskRoutePaused("Task paused before external call reservation")
             count = current.get("paid_calls", 0)
             if not allows_new_call(current, 'max_paid_calls', count):
                 raise Conflict("已达到本任务外部调用次数上限；重试不会重置额度")
+            guard_external_call(current)
             current["paid_calls"] = count + 1
 
         self.store.update("task", task["id"], reserve)
@@ -144,12 +153,31 @@ class NodeExecutor:
         return result
 
     def call_agent(self, task, node, inputs, model, frames=None, *, decision_id=None):
+        inputs = {"agent_role": "work", **inputs}
+        from .resource_budget import guard_external_call, guard_storage
+        current = self.store.require("task", task["id"])
+        guard_external_call(current)
+        guard_storage(self.service, current)
         agent = self.agent_for(task)
         cfg = getattr(agent, "config", None)
         if cfg and (cfg.mode == "unconfigured" or cfg.mode == "http" and (not cfg.base_url or not cfg.model)):
             raise CapabilityUnavailable("尚未配置后台Agent，请在设置页查看接入步骤")
         schema = model.model_json_schema()
         packet = self.catalog.packet(task, node, inputs, schema)
+        packet["agent_role"] = inputs["agent_role"]
+        packet["work_domain"] = ("audio" if node["definition_id"] in {
+            "transcribe", "audio_prepare", "audio_voice", "audio"} else "visual")
+        if node["definition_id"] == "observe" and inputs.get("agent_role") in {
+                "task_route", "observation_work"}:
+            from .task_route import ROUTE_INSTRUCTIONS, WORK_INSTRUCTIONS
+            guidance = ROUTE_INSTRUCTIONS if inputs["agent_role"] == "task_route" else WORK_INSTRUCTIONS
+            packet["instruction"] = packet.get("instruction", "") + (
+                "\n\n本轮按以下程序指定角色和输出合同执行，上游观察规则仅作为业务约束：\n" + guidance)
+            packet["agent_role"] = inputs["agent_role"]
+        from video_translation.application.work_handoffs import handoffs_for
+        packet["shared_handoffs"] = handoffs_for(self.service, task["id"], node["id"])
+        from video_translation.application.task_supervision import live_directions
+        packet["route_directions"] = live_directions(self.service, task["id"], node["id"])
         packet["images"] = frames or []
         if decision_id:
             packet["decision_id"] = decision_id
@@ -158,6 +186,7 @@ class NodeExecutor:
         supplied = {item["id"] for item in packet["resource_versions"]}
         trace = {
             "id": identifier(), "task_id": task["id"], "node_id": node["id"],
+            "agent_role": inputs.get("agent_role"),
             "attempt": node["attempt"], "decision_id": decision_id,
             "stage": node["definition_id"], "status": "running", "created_at": now(),
             "resources": [item for item in packet["resource_index"] if item["id"] in supplied],
@@ -170,7 +199,9 @@ class NodeExecutor:
             from .agent_format import run_agent
             from .workspace import workspace_for
             workspace = workspace_for(self.service, task)
-            with workspace.measure("model_operation", node_id=node["id"], decision_id=decision_id) if workspace else nullcontext():
+            with workspace.measure("model_operation", node_id=node["id"], decision_id=decision_id,
+                                   packet_bytes=len(json.dumps(packet, ensure_ascii=False).encode("utf-8")),
+                                   supplied_images=len(frames or [])) if workspace else nullcontext():
                 result = run_agent(self, agent, task, node, packet, schema,
                                    self.service.node_directory(task["id"], node))
             media = result.pop("_media", {})
@@ -184,6 +215,9 @@ class NodeExecutor:
             raise
         self.store.update("agent_trace", trace["id"], lambda row: row.update(
             status="succeeded", result=validated, media=media, finished_at=now()))
+        from video_translation.application.task_supervision import acknowledge_directions
+        acknowledge_directions(self.service, task["id"], node["id"],
+                               max((r["revision"] for r in packet["route_directions"]), default=-1))
         return validated, media
 
     def execute(self, task, node):
@@ -255,12 +289,13 @@ class NodeExecutor:
         from .workspace import workspace_for
         workspace = workspace_for(self.service, task)
         directory = self.service.node_directory(task["id"], node)
-        if workspace:
-            estimate = (info["width"] * info["height"] * 3 * self.media.max_frames
-                        + info["duration_ms"] * 44100 * 4 // 1000)
-            workspace.preflight(directory / "prepared.json", estimate)
-        with workspace.measure("prepare") if workspace else nullcontext():
-            prepared = self.media.prepare(source, directory)
+        with workspace.local_write() if workspace else nullcontext():
+            if workspace:
+                estimate = (info["width"] * info["height"] * 3 * self.media.max_frames
+                            + info["duration_ms"] * 44100 * 4 // 1000)
+                workspace.preflight(directory / "prepared.json", estimate)
+            with workspace.measure("prepare") if workspace else nullcontext():
+                prepared = self.media.prepare(source, directory)
         self.store.update("asset", node["asset_id"], lambda asset: asset.update(media=prepared["media"]))
         for frame in prepared["frames"]:
             self.service.artifact(task["id"], node, Path(frame["path"]), "image")
@@ -288,6 +323,7 @@ class NodeExecutor:
 
     def run_observe(self, task, node):
         prepared = self.output(task, node, "prepare")
+        route_question = None
         inputs = {
             "media": prepared["media"],
             "transcript": self.output(task, node, "transcribe"),
@@ -297,6 +333,14 @@ class NodeExecutor:
         if task.get("visual_route") == "agent_adaptive":
             from .adaptive_observe import observe
             inventory, consumed = observe(self, task, node, inputs, prepared["frames"])
+            if inventory["unknowns"] or consumed.get("clarification_answer_changed"):
+                from .task_route import TaskRoutePaused, supervise_observation
+                try:
+                    inventory, route_evidence, route_question = supervise_observation(
+                        self, task, node, inputs, inventory, consumed)
+                except TaskRoutePaused:
+                    return {"_paused": True}
+                consumed = {**consumed, "task_route": route_evidence}
         else:
             inventory, consumed = self.call_agent(task, node, inputs, Inventory, prepared["frames"])
         if any(
@@ -311,12 +355,26 @@ class NodeExecutor:
         if transcript.get("segments") and not inventory["speech"]:
             raise ValueError("ASR识别到人声，但清单遗漏全部人声")
         if inventory["unknowns"]:
+            if task.get("visual_route") == "agent_adaptive" and route_question is None:
+                raise CapabilityUnavailable("Task Route must resolve or classify remaining observation gaps")
+            if route_question:
+                existing = [q for q in self.store.list("question")
+                            if q.get("task_id") == task["id"] and q.get("node_id") == node["id"]
+                            and q.get("status") == "open"
+                            and q.get("context", {}).get("task_route_session_id") ==
+                            consumed["task_route"]["session_id"]]
+                if existing:
+                    if len(existing) != 1 or existing[0]["prompt"] != route_question:
+                        raise Conflict("Task Route question evidence changed")
+                    return {**inventory, "_wait": existing[0]["id"], "_media": consumed}
             question = self.service.question(
                 task["id"],
                 node,
-                "请补充原片中无法确认的内容：" + "；".join(inventory["unknowns"]),
+                route_question or ("请补充原片中无法确认的内容：" + "；".join(inventory["unknowns"])),
                 "clarification",
                 [],
+                context=({"task_route_session_id": consumed["task_route"]["session_id"],
+                          "category": "user_intent"} if route_question else None),
             )
             return {**inventory, "_wait": question["id"], "_media": consumed}
         if task.get("confirm_brief") and not node["output"].get("brief_confirmed"):
@@ -541,8 +599,8 @@ class NodeExecutor:
         from .review_draft import metadata
         visual, audio = (self.output(task, node, definition) for definition in ("visual", "audio"))
         if task.get("visual_route") == "agent_adaptive":
-            from .stage_quality import require_clean_plate, require_visual_review
-            require_clean_plate(self.output(task, node, "clean"), task)
+            from .stage_quality import require_production_base, require_visual_review
+            require_production_base(self.output(task, node, "clean"), task)
             require_visual_review(visual, task)
         target = self.service.node_directory(task["id"], node) / "candidate.mp4"
         self.media.compose(
@@ -577,6 +635,9 @@ class NodeExecutor:
         }
 
     def run_review(self, task, node):
+        if task.get("visual_route") == "agent_adaptive":
+            from .stage_quality import require_production_base
+            require_production_base(self.output(task, node, "clean"), task)
         candidate = self.output(task, node, "compose")
         inventory = self.output(task, node, "observe")
         directory = self.service.node_directory(task["id"], node)

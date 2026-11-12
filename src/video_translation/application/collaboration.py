@@ -6,7 +6,7 @@ import json
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from video_translation.application.tasks import Conflict
 from video_translation.domain.models import Contract
@@ -19,6 +19,7 @@ class MessageCreate(Contract):
     text: str = Field(min_length=1, max_length=4000)
     scope: Literal["node", "downstream"] = "node"
     pause_after_current: bool = True
+    interaction: Literal["proposal", "route"] = "proposal"
 
     @field_validator("text")
     @classmethod
@@ -32,6 +33,26 @@ class CoordinationReply(Contract):
     reply: str = Field(min_length=1, max_length=6000)
     question: str | None = Field(default=None, max_length=1500)
     proposed_instruction: str | None = Field(default=None, max_length=4000)
+    action: Literal["inform", "direct", "clarify"] = "inform"
+    options: list[str] = Field(default_factory=list, max_length=4)
+    target_node_id: str | None = Field(default=None, max_length=100)
+
+    @model_validator(mode="after")
+    def actionable(self):
+        if self.action == "direct" and not (self.proposed_instruction or "").strip():
+            raise ValueError("A direction needs a concrete business instruction")
+        if self.action == "clarify" and (
+                not self.question or len(set(self.options)) < 2
+                or any(not x.strip() or len(x) > 300 for x in self.options)):
+            raise ValueError("A user decision needs a question and 2..4 distinct short options")
+        return self
+
+
+class CleanContinuation(Contract):
+    expected_revision: int = Field(ge=0)
+    expected_attempt: int = Field(ge=0)
+    expected_status: Literal["failed", "interrupted", "succeeded"]
+    expected_output_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 def node_for(task, node_id):
@@ -90,6 +111,8 @@ class Collaboration:
                     "scope": request.scope, "pause_after_current": request.pause_after_current,
                 }.items()):
                     raise Conflict("消息编号已用于其他内容")
+                if existing.get("interaction", "proposal") != request.interaction:
+                    raise Conflict("消息编号已用于其他沟通方式")
                 return existing
             if sum(m["status"] in {"queued", "running"} for m in self.list(task_id)) >= 10:
                 raise Conflict("待处理消息过多，请等待当前消息完成")
@@ -98,6 +121,7 @@ class Collaboration:
             return self.store.put("conversation", {
                 "id": key, "task_id": task_id, "node_id": node_id, "text": request.text,
                 "scope": request.scope, "pause_after_current": request.pause_after_current,
+                "interaction": request.interaction, "recipient": "route",
                 "status": "queued", "created_at": now(), "reply": None, "error": None,
                 "applied_revision": None,
             })
@@ -114,8 +138,9 @@ class Collaboration:
                 current["status"] = task_status(current)
             return self.store.update("task", task_id, mutate)
 
-    def pending(self, task_id):
-        return next((m for m in self.list(task_id) if m["status"] == "queued"), None)
+    def pending(self, task_id, *, interaction=None):
+        return next((m for m in self.list(task_id) if m["status"] == "queued"
+                     and (interaction is None or m.get("interaction", "proposal") == interaction)), None)
 
     def apply(self, task_id, message_id):
         with self.store.lock:
@@ -156,3 +181,7 @@ class Collaboration:
             if message["status"] == "running":
                 self.store.update("conversation", message["id"],
                                   lambda m: m.update(status="unknown", error="服务中断，回复结果未知；未自动重发"))
+
+    def continue_clean(self, task_id, message_id, request):
+        from .node_continuation import continue_clean
+        return continue_clean(self.service, task_id, message_id, request)

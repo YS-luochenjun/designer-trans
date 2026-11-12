@@ -6,7 +6,8 @@
 
 - 上传原片，或在配置合法身份后读取外部需求与原片，创建语言版本。
 - 按工作流完成内容观察、译文、制作计划、清底、文字合成、声音处理与质量检查。
-- Work Agent 决定有限的局部制作动作；Route 处理经授权的技术诊断与恢复，保留未知结果和费用。
+- Work Agent 自主制作和复核；Route 接收用户需求、检阅报备并协调有界返工，保留未知结果和费用。
+- 独立音频与画面可并行，沟通不默认暂停制作；清底合格后才解锁译字与成片审核。
 - 统一媒体执行层复用抽帧证据，以局部无损补片保存修改，在需要可播放视频时生成并核验完整表示。
 - 冻结任务使用的模型、资源和执行参数，保留候选、接受、拒绝及原操作回执。
 - 提供接单策略、版本绑定的定向返工、显式预览及受限缓存保留接口；相关策略与额外权限需要单独配置。
@@ -45,6 +46,8 @@ Copy-Item config/application/local.example.json config/application/local.json
 | `docs` | 项目架构、安装、存储与发布说明 |
 
 参考[架构与边界](docs/architecture.md)、[存储与执行效率](docs/storage-and-performance.md)、[时序清底方法调研](docs/temporal-removal-research.md)、[连续片段与管家迭代方案](docs/iteration-plan.md)、[源码发布](docs/source-release.md)。
+Agent 开发遵循根目录 `AGENTS.md`、[Route 与 Work](docs/architecture/route-work.md)
+及[逐阶段质量](docs/operations/stage-quality.md)。源码版本与生产加载分别确认。
 
 ## 分发边界
 

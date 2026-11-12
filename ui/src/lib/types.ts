@@ -11,7 +11,18 @@ export interface Artifact extends Asset {
   node_id: string;
   sha256: string;
 }
+export interface RouteReport {
+  owner: "route";
+  source: "route_state_projection" | "route_plan";
+  phase: string;
+  summary: string;
+  next_step: string;
+  needs_user_decision: boolean;
+  node_id: string | null;
+}
 export interface TaskNode {
+  route_report?: RouteReport;
+  route_state?: string;
   id: string;
   definition_id: string;
   label: string;
@@ -118,6 +129,10 @@ export interface ImagegenRequest {
   result_receipt_path?: string;
 }
 export interface Task {
+  route_report?: RouteReport;
+  task_route_events?: { id: string; node_id: string; trigger: string; status: string; reason?: string;
+    plan?: { action: string; reason: string; instruction?: string }; created_at: string }[];
+  output_goal?: "complete_candidate" | "quality_approved";
   imagegen_requests?: ImagegenRequest[];
   production_policy?: { mode: string; quality_passed: boolean };
   model_snapshot?: Record<string, unknown>;
@@ -156,6 +171,9 @@ export interface Task {
   audio_strategy?: "preserve_background" | "replace_all_audio";
 }
 export interface NodeMessage {
+  interaction?: "proposal" | "route";
+  direction?: { status: string; revision: number };
+  direction_error?: string;
   id: string;
   node_id: string;
   text: string;
@@ -163,8 +181,10 @@ export interface NodeMessage {
   status: string;
   created_at: string;
   error?: string | null;
-  reply?: { reply: string; question: string | null; proposed_instruction: string | null } | null;
+  reply?: { reply: string; question: string | null; proposed_instruction: string | null;
+    action?: "inform" | "direct" | "clarify"; options?: string[] } | null;
   applied_revision?: number | null;
+  continuation?: { status: "queued"; node_id: string; revision: number; at: string } | null;
 }
 export interface Page<T> {
   items: T[];

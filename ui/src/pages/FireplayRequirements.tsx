@@ -40,6 +40,8 @@ type Connection = {
   business_authorized?: boolean | null;
   message?: string;
   credential_expires_at?: string;
+  automatic_renewal?: boolean;
+  renewal_status?: string;
 };
 type LoginState = { status: string; message: string };
 const connectionLabels: Record<string, string> = {
@@ -47,6 +49,10 @@ const connectionLabels: Record<string, string> = {
   protocol_ready: "已连接",
   credentials_missing: "尚未登录",
   credentials_expired: "登录已过期",
+  refresh_unknown: "续期未确认，请重新登录",
+  refresh_login_required: "登录续期已失效",
+  refresh_rejected: "登录续期已失效",
+  refresh_busy: "登录正在更新",
   unauthorized: "授权失效或没有查询权限",
   timeout: "连接超时",
   disabled: "连接未启用",
@@ -107,7 +113,8 @@ export function FireplayRequirements() {
     return () => { disposed = true; window.clearInterval(timer); };
   }, [loginPending]);
   const currentConnection = checkedConnection ?? connection.data;
-  const expired = ["credentials_expired", "unauthorized"].includes(currentConnection?.code ?? "");
+  const renewalNeedsLogin = ["unknown", "login_required"].includes(currentConnection?.renewal_status ?? "");
+  const expired = renewalNeedsLogin || ["credentials_expired", "unauthorized", "refresh_rejected"].includes(currentConnection?.code ?? "");
   const items = remote.data?.items ?? [];
   const pageCount = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
   const currentPage = Math.min(pageIndex, pageCount - 1);
@@ -178,7 +185,10 @@ export function FireplayRequirements() {
             {connectionLabels[currentConnection?.code ?? ""] ?? (currentConnection?.configured ? "待检查" : "尚未连接")}
           </span>
         </div>
-        {expired && <p role="alert">访问凭据{currentConnection?.credential_expires_at ? `已于 ${time(currentConnection.credential_expires_at)} 过期` : "已失效或不具备查询权限"}。请重新授权后检查连接。</p>}
+        {renewalNeedsLogin ? <p role="alert">登录自动续期未确认或已失效，请重新登录。项目不会重复提交原续期请求。</p>
+          : expired && <p role="alert">访问凭据{currentConnection?.code === "credentials_expired" && currentConnection?.credential_expires_at ? `已于 ${time(currentConnection.credential_expires_at)} 过期` : "已失效或不具备查询权限"}。请重新授权后检查连接。</p>}
+        {currentConnection?.automatic_renewal && !renewalNeedsLogin && <p>已启用登录自动续期；服务端撤销或会话到期后仍需重新登录。</p>}
+        {currentConnection?.credential_configured && currentConnection?.automatic_renewal === false && <p>当前只有访问凭据；重新登录一次可取得服务端提供的续期凭据。</p>}
         <div className="toolbar">
           <button className="primary" disabled={busy || loginPending} onClick={() => void run(async () => {
             try {

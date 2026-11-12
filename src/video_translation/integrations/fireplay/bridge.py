@@ -29,6 +29,8 @@ class FireplayBridge:
         self.settings, self.store, self.client = settings, store, client
         self.mcp = None
         self.lock = threading.RLock()
+        self._renew_stop = threading.Event()
+        self._renew_thread = None
         if settings.fireplay_mode == "mcp":
             from .mcp import FireplayMCP, FireplayMCPConfig
             self.mcp = FireplayMCP(FireplayMCPConfig.from_env(settings.root), client=client)
@@ -37,7 +39,7 @@ class FireplayBridge:
         self._refresh_identity()
 
     def _identity_cache_id(self):
-        identity = self.mcp.config.fingerprint() if self.mcp else self.settings.fireplay_url + "|" + self.settings.fireplay_token
+        identity = self.mcp.config.scope_fingerprint() if self.mcp else self.settings.fireplay_url + "|" + self.settings.fireplay_token
         return "fireplay:" + hashlib.sha256((identity + "|" + self.settings.fireplay_scope).encode()).hexdigest()
 
     def _refresh_identity(self):
@@ -200,8 +202,27 @@ class FireplayBridge:
             return self.projects()
 
     def close(self):
+        self._renew_stop.set()
+        if self._renew_thread:
+            self._renew_thread.join(timeout=20)
         if self.mcp:
             self.mcp.close()
+
+    def start(self):
+        if self.mcp is None or self._renew_thread is not None:
+            return
+        self._renew_thread = threading.Thread(target=self._renew_loop, daemon=True, name="fireplay-renewal")
+        self._renew_thread.start()
+
+    def _renew_loop(self):
+        from .mcp import FireplayMCPError
+        while not self._renew_stop.is_set():
+            try:
+                self.mcp.renew_credentials()
+            except (FireplayMCPError, OSError):
+                # Safe state is exposed by connection(); never log remote bodies or tokens.
+                pass
+            self._renew_stop.wait(30)
 
 
 class _Borrow:

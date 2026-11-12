@@ -20,8 +20,18 @@ def retained_archive_evidence(controller, state, candidate, turn, clock):
     required = [request_time(i, clock["rate"]) for i in boundary_indices(
         candidate["start_ms"], candidate["end_ms"], clock["rate"], clock["frames"])]
     limit = 6 if baseline is not None else 8
-    times = sorted(set(required + [
-        t for t in state["times_ms"] if t not in required][:limit - len(required)]))
+    requested = state.get("archive_requested_times")
+    if requested:
+        # Explicit follow-up evidence takes priority over optional repeated boundaries.
+        unique = {sample_index(t, clock["rate"], clock["frames"]): t for t in requested}
+        if len(unique) > limit:
+            raise ValueError("历史三方/四方检查超过图片上限；请缩小时间点，未替换所请求的帧")
+        chosen = list(unique.values())
+        times = sorted(chosen + [t for t in required if sample_index(
+            t, clock["rate"], clock["frames"]) not in unique][:limit - len(chosen)])
+    else:
+        times = sorted(set(required + [
+            t for t in state["times_ms"] if t not in required][:limit - len(required)]))
     frames = controller.frames(controller.source, times, "原片", f"archive-source-{turn}")
     frames += controller.frames(controller.verified(state["base"]), times,
                                 "当前底片", f"archive-base-{turn}")
@@ -33,6 +43,7 @@ def retained_archive_evidence(controller, state, candidate, turn, clock):
         candidate, expected if baseline is not None else None, frames,
         baseline_label="历史输入底片", candidate_label="历史候选")
     changes["historical_input_verified"] = baseline is not None
+    changes["supplied_times_ms"] = times
     if baseline is None:
         changes["reason"] = "Retained input missing or failed task/path/SHA verification; no attribution"
     return frames, changes
@@ -45,6 +56,7 @@ def candidate_diagnostics(candidate, clock):
               "tracked_donor", "protected_foreground", "review_status", "rejection")
     result = {k: candidate[k] for k in fields if k in candidate}
     first, stop = frame_window(candidate["start_ms"], candidate["end_ms"], clock["rate"])
+    stop = min(stop, clock["frames"])
     result["execution_window"] = {
         "rate": clock["rate"], "first_frame": first, "end_frame_exclusive": stop,
         "last_frame": stop - 1, "changed_pixels_measured": False,

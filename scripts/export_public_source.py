@@ -6,8 +6,10 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import posixpath
 import re
 import stat
+from urllib.parse import unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 DIRECTORIES = {"src", "contracts", "workflows", "prompts", "knowledge", "skills"}
@@ -28,14 +30,19 @@ UI_FILES = (
     "tsconfig.json", "vite.config.ts",
 )
 PUBLIC_DOCS = {
+    "AGENTS.md": "AGENTS.md",
     "README.md": "README.md",
     ".gitignore": "gitignore.template",
+    ".gitattributes": "gitattributes.template",
     "docs/architecture.md": "architecture.md",
     "docs/storage-and-performance.md": "storage-and-performance.md",
     "docs/source-release.md": "source-release.md",
     "docs/iteration-plan.md": "iteration-plan.md",
     "docs/temporal-removal-research.md": "temporal-removal-research.md",
     "docs/operations/clone-install.md": "clone-install.md",
+    "docs/architecture/route-work.md": "route-work.md",
+    "docs/operations/stage-quality.md": "stage-quality.md",
+    "docs/operations/resource-budget.md": "resource-budget.md",
 }
 EXCLUDED = {
     ".git", "runtime", "node_modules", "dist", "__pycache__", "tests",
@@ -60,6 +67,7 @@ SECRET_PATTERNS = {
     ),
 }
 MANIFEST = "SOURCE-MANIFEST.json"
+MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\((<?[^\s)]+>?)")
 
 
 def regular(path: Path) -> None:
@@ -89,12 +97,17 @@ def scan(relative: Path, data: bytes) -> None:
     if len(data) > 10 * 1024**2:
         raise ValueError(f"Source file exceeds review limit: {relative.as_posix()}")
     if (relative.suffix.lower() not in TEXT_SUFFIXES
-            and relative.name not in {".gitignore"}):
+            and relative.name not in {".gitignore", ".gitattributes"}):
         raise ValueError(f"Unexpected source file type: {relative.as_posix()}")
     text = data.decode("utf-8-sig")
     for rule, pattern in SECRET_PATTERNS.items():
         if pattern.search(text):
             raise ValueError(f"Public-content check failed ({rule}): {relative.as_posix()}")
+
+
+def public_bytes(path: Path) -> bytes:
+    """Publish UTF-8 text with LF so every Git checkout matches the manifest."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
 
 
 def tree(directory: Path):
@@ -117,6 +130,21 @@ def tree(directory: Path):
             yield path
 
 
+def check_references(rows: list[tuple[str, Path, dict]]) -> None:
+    """Resolve links in the published tree, where curated documents change paths."""
+    paths = {name for name, _, _ in rows}
+    for name, source, _ in rows:
+        if source.suffix.lower() != ".md":
+            continue
+        for match in MARKDOWN_LINK.finditer(source.read_text("utf-8-sig")):
+            link = urlsplit(match[1].strip("<>"))
+            if link.scheme or link.netloc or not link.path:
+                continue
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(name), unquote(link.path)))
+            if target not in paths and not any(path.startswith(target + "/") for path in paths):
+                raise ValueError(f"Missing public document reference: {name} -> {target}")
+
+
 def inventory(root: Path) -> list[tuple[str, Path, dict]]:
     selected = {}
 
@@ -127,7 +155,7 @@ def inventory(root: Path) -> list[tuple[str, Path, dict]]:
                 break
         regular(path)
         relative = safe_relative(target or path.relative_to(root).as_posix())
-        data = path.read_bytes()
+        data = public_bytes(path)
         scan(relative, data)
         key = relative.as_posix()
         if key in selected:
@@ -151,7 +179,9 @@ def inventory(root: Path) -> list[tuple[str, Path, dict]]:
     curated = root / "docs" / "public"
     for target, source in PUBLIC_DOCS.items():
         add(curated / source if curated.exists() else root / target, target)
-    return [(key, *selected[key]) for key in sorted(selected)]
+    rows = [(key, *selected[key]) for key in sorted(selected)]
+    check_references(rows)
+    return rows
 
 
 def verify(destination: Path) -> dict:
@@ -190,6 +220,7 @@ def verify(destination: Path) -> dict:
             actual.add(path.relative_to(destination).as_posix())
     if actual != expected:
         raise ValueError("Public tree has missing or additional files")
+    check_references([(row["path"], destination / row["path"], row) for row in manifest["files"]])
     return {"passed": True, "files": len(manifest["files"]),
             "bytes": sum(row["bytes"] for row in manifest["files"]),
             "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
@@ -212,7 +243,7 @@ def export(root: Path, destination: Path) -> dict:
         check_directory(parent)
     destination.mkdir()
     for relative, source, row in rows:
-        data = source.read_bytes()
+        data = public_bytes(source)
         if len(data) != row["bytes"] or hashlib.sha256(data).hexdigest() != row["sha256"]:
             raise ValueError(f"Source changed during export: {relative}")
         target = destination / relative

@@ -16,6 +16,7 @@ import { AgentActivity } from "../components/AgentActivity";
 import { TaskDeletion, readPendingDeletion } from "../components/TaskDeletion";
 import type { PendingDeletion } from "../components/TaskDeletion";
 import { NodeConversation } from "../components/NodeConversation";
+import { RouteReport } from "../components/RouteReport";
 import { NodeOverview } from "../components/NodeOverview";
 import { LocalPreview } from "../components/LocalPreview";
 import { CleanPlate } from "../components/CleanPlate";
@@ -51,6 +52,7 @@ function QuestionCard({
   const [answer, setAnswer] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [reviewIssues, setReviewIssues] = useState<string[]>([]);
   const send = async (value: string) => {
     setBusy(true);
     setError("");
@@ -59,7 +61,7 @@ function QuestionCard({
         method: "POST",
         body: JSON.stringify({
           answer: value,
-          feedback: question.kind === "review" ? answer : "",
+          feedback: question.kind === "review" ? [...reviewIssues, answer].filter(Boolean).join("；") : "",
         }),
       });
       refresh();
@@ -71,7 +73,7 @@ function QuestionCard({
   };
   return (
     <article className="question">
-      <div className="eyebrow">需要你的判断</div>
+      <div className="eyebrow">Route 请你确认</div>
       <p>{question.prompt}</p>
       {question.kind === "brief" && question.context.inventory && <details>
         <summary>原片内容清单</summary><JsonView value={question.context.inventory} />
@@ -82,12 +84,19 @@ function QuestionCard({
             请完整观看原片与候选后再批准。批准仅适用于当前成片版本。
           </p>
           <label>
-            审核意见（不通过时用于返工）
+            哪些地方需要返工（可多选）
+            <div className="actions">{["清底仍有原文", "译文不准确", "字号或动效不合适", "声音有问题"].map(issue =>
+              <button key={issue} type="button" className="secondary" aria-pressed={reviewIssues.includes(issue)}
+                onClick={() => setReviewIssues(current => current.includes(issue)
+                  ? current.filter(x => x !== issue) : [...current, issue])}>{issue}</button>)}</div>
+          </label>
+          <label>
+            其他说明（可选）
             <textarea
               value={answer}
               onChange={(event) => setAnswer(event.target.value)}
               maxLength={4000}
-              placeholder="写明时间点、漏译、声音或画面问题。提交不通过后，可在任务顶部发起有上限的返工。"
+              placeholder="可补充时间点。提交不通过后，Route 会在原额度内安排返工。"
             />
           </label>
           <div className="actions">
@@ -104,10 +113,14 @@ function QuestionCard({
               disabled={busy}
               onClick={() => void send("reject")}
             >
-              不通过
+              不通过，交给 Route 返工
             </button>
           </div>
         </>
+      ) : question.options.length > 0 ? (
+        <div className="actions">{question.options.map(option =>
+          <button key={option} className="secondary" disabled={busy}
+            onClick={() => void send(option)}>{option}</button>)}</div>
       ) : (
         <form
           onSubmit={(e) => {
@@ -235,7 +248,16 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
         }
       />
       <ErrorBox message={error || actionError} />
+      <RouteReport report={task.route_report} />
       <TaskManagementContext taskId={id} />
+      {Boolean(task.task_route_events?.some(event => ["queued", "running", "planned", "blocked"].includes(event.status))) &&
+        <details className="task-drawer"><summary>Route 协调记录</summary>
+          {task.task_route_events?.slice(-8).map(event => <p key={event.id}>
+            {event.status === "applied" ? "已安排返工" : event.status === "blocked" ? "需要解决阻塞" :
+              event.status === "running" ? "正在协调" : event.status === "acknowledged" ? "已收到 Work 报备" : "等待协调"}
+            {event.reason || event.plan?.reason ? ` · ${event.reason || event.plan?.reason}` : ""}
+          </p>)}
+        </details>}
 
       {questions.length > 0 && <a className="review-shortcut" href="#task-review"
         onClick={(event) => {
@@ -268,13 +290,11 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   </button>
                 </div>
                 <NodeConversation key={node.id} task={task} node={node} refresh={reload} />
-                <NodeOverview task={task} node={node} onShowCalls={() => showRecords("calls", node.id)} notice={node.error && <div>
-                  <ErrorBox message={node.definition_id === "clean" && node.error.startsWith("局部清底需要")
-                    ? (task.production_decisions ?? []).some(decision => decision.node_id === node.id && decision.status === "running")
-                      ? "正在执行局部制作决策；下方诊断是主流程上次停止时的记录，已有修复保留。"
-                      : "自动清字流程已停止，已有修复保留。需要处理下方当前剩余区间；诊断详情保留上次停止原因。"
-                    : node.error} />
-                </div>} />
+                <RouteReport report={node.route_report} />
+                <NodeOverview task={task} node={node} onShowCalls={() => showRecords("calls", node.id)}
+                  notice={node.error && <details><summary>Work 与程序的原始诊断</summary>
+                    <ErrorBox message={node.error} />
+                  </details>} />
                 <AgentActivity node={node} traces={(task.agent_traces ?? []).filter(trace =>
                   !trace.decision_id || !(task.production_decisions ?? []).some(decision =>
                     decision.node_id === node.id && decision.id.startsWith(trace.decision_id!)))} />

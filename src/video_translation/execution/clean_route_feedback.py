@@ -1,7 +1,7 @@
 """Finite feedback from completed local work assignments to the next clean route."""
 from .clean_progress import fingerprint
 
-LOCAL_METHODS = ("inspect", "local_surface", "tracked_donor")
+LOCAL_METHODS = ("inspect", "flat", "donor", "local_surface", "tracked_donor")
 
 
 def assignment_key(base, source_id, method, contract, methods_sha):
@@ -81,10 +81,17 @@ def frontier(controller, state, queue, contract, methods_sha):
                 attempted.add(assignment_key(outcome["base_sha256"], outcome["source_id"],
                                             outcome["original_method"], contract, methods_sha))
     capabilities = controller.capabilities()
+    from .work_autonomy import enabled
+    methods = LOCAL_METHODS + (("image_edit", "wan") if enabled(controller.task) else ())
+    # Fresh, explicitly applied user feedback permits one new method assessment.
+    # Recipe-level duplicate guards and the original call budget still apply.
+    user_continuation = any(r.get("trigger") in {"user_continuation", "route_rework"} and r["status"] == "pending"
+                            and r["base_sha256"] == state["base"]["sha256"]
+                            for r in state.get("work_feedback", {}).values())
     result = [{"source_id": row["source_id"], "method": method}
-            for row in queue["remaining"] for method in LOCAL_METHODS
-            if method in capabilities and assignment_key(
-                state["base"]["sha256"], row["source_id"], method, contract, methods_sha) not in attempted]
+            for row in queue["remaining"] for method in methods
+            if method in capabilities and (user_continuation or assignment_key(
+                state["base"]["sha256"], row["source_id"], method, contract, methods_sha) not in attempted)]
     from .imagegen_bridge import can_request
     from .clean_references import available_references
     refs = available_references(controller, state["base"]["sha256"])

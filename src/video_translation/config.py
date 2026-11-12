@@ -12,6 +12,7 @@ class Settings:
     root: Path
     runtime: Path
     max_concurrent_tasks: int = 2
+    max_concurrent_nodes: int = 2
     max_upload_bytes: int = 512 * 1024 * 1024
     max_duration_ms: int = 180_000
     ffmpeg: str = "ffmpeg"
@@ -21,6 +22,9 @@ class Settings:
     fireplay_token: str = ""
     fireplay_scope: str = ""
     fireplay_mode: str = "bridge"
+    server_host: str = "127.0.0.1"
+    lan_hosts: tuple[str, ...] = ()
+    lan_networks: tuple[str, ...] = ()
 
     @classmethod
     def load(cls, root: Path | None = None, runtime: Path | None = None, worker_enabled=True):
@@ -29,10 +33,12 @@ class Settings:
         load_local_environment(root)
         path = root / "config/application/runtime.toml"
         config = tomllib.loads(path.read_text("utf-8")) if path.exists() else {}
+        server = config.get("server", {})
         return cls(
             root=root,
             runtime=(runtime or Path(os.environ.get("VT_RUNTIME", root / "runtime"))).resolve(),
             max_concurrent_tasks=max(1, min(8, int(config.get("max_concurrent_tasks", 2)))),
+            max_concurrent_nodes=max(1, min(4, int(config.get("max_concurrent_nodes", 2)))),
             max_upload_bytes=int(config.get("max_upload_bytes", 512 * 1024 * 1024)),
             max_duration_ms=int(config.get("max_duration_ms", 180_000)),
             ffmpeg=os.environ.get("VT_FFMPEG", "ffmpeg"),
@@ -42,6 +48,9 @@ class Settings:
             fireplay_token=os.environ.get("VT_FIREPLAY_BRIDGE_TOKEN", ""),
             fireplay_scope=os.environ.get("VT_FIREPLAY_SCOPE", "all"),
             fireplay_mode=os.environ.get("VT_FIREPLAY_MODE", "bridge" if os.environ.get("VT_FIREPLAY_BRIDGE_URL") else "mcp"),
+            server_host=server.get("host", "127.0.0.1"),
+            lan_hosts=tuple(server.get("allowed_hosts", [])),
+            lan_networks=tuple(server.get("allowed_networks", [])),
         )
 
     def media_available(self):

@@ -17,6 +17,12 @@ class Conflict(ValueError):
     pass
 
 
+class ArtifactRetired(Conflict):
+    def __init__(self, receipt):
+        self.receipt = receipt
+        super().__init__("历史视频像素已按清理计划退役；原记录与费用仍保留，不能当作新调用重试")
+
+
 class TaskService:
     def __init__(self, settings: Settings, store: Store):
         self.settings, self.store = settings, store
@@ -55,7 +61,8 @@ class TaskService:
             "separation_snapshot": separation_snapshot,
             "image_snapshot": image_config_snapshot,
             "resource_snapshot": ResourceCatalog(self.settings.root).snapshot(),
-            "execution_snapshot": ExecutionProfile(mode=request.execution_profile).model_dump(),
+            "execution_snapshot": ExecutionProfile(
+                mode=request.execution_profile, resource_budget=request.resource_budget).model_dump(),
             "nodes": instantiate(definition, request.asset_ids, request.target_locales),
             "revisions": {},
             "error": None,
@@ -97,6 +104,11 @@ class TaskService:
     def checked_path(self, record: dict) -> Path:
         path = Path(record["path"]).resolve()
         if not path.is_relative_to(self.settings.runtime) or not path.is_file():
+            if path.is_relative_to(self.settings.runtime):
+                from .task_storage import retirement_for
+                receipt = retirement_for(self.store, path)
+                if receipt:
+                    raise ArtifactRetired(receipt)
             raise KeyError("文件不存在或不属于运行目录")
         return path
 
@@ -160,9 +172,26 @@ class TaskService:
 
     def detail(self, task_id):
         task = self.store.require("task", task_id)
+        current_nodes = {n["id"] for n in task["nodes"]}
+
+        def active(row):
+            return (row.get("task_id") == task_id
+                    and (not row.get("node_id") or row["node_id"] in current_nodes))
+
         from .imagegen_bridge import public_requests
         from video_translation.execution.clean_progress import progress
         sessions = [r for r in self.store.list("production_session") if r["task_id"] == task_id]
+        route_events = sorted(
+            [e for e in self.store.list("task_route_event") if active(e)],
+            key=lambda e: (e["created_at"], e["id"]))
+        from .route_reports import report
+        for node in task["nodes"]:
+            node["route_report"] = report(task, route_events, node)
+        for event in route_events:
+            owner = next((n for n in task["nodes"] if n["id"] == event["node_id"]), None)
+            if owner and owner["attempt"] == event["attempt"] and event["status"] in {
+                    "queued", "running", "planned", "waiting_work", "blocked"}:
+                owner["route_state"] = event["status"]
         for session in sessions:
             owner = next((n for n in task["nodes"] if n["id"] == session["node_id"]), None)
             observed = next((n for n in task["nodes"] if owner and n["asset_id"] == owner["asset_id"]
@@ -176,21 +205,23 @@ class TaskService:
             **self.summary(task),
             "assets": [self.public_asset(self.store.require("asset", value)) for value in task["asset_ids"]],
             "artifacts": [
-                self.public_asset(r) for r in self.store.list("artifact") if r["task_id"] == task_id
+                self.public_asset(r) for r in self.store.list("artifact") if active(r)
             ],
-            "questions": [r for r in self.store.list("question") if r["task_id"] == task_id],
+            "questions": [r for r in self.store.list("question") if active(r)],
             "deliveries": [r for r in self.store.list("delivery") if r["task_id"] == task_id],
-            "operations": [r for r in self.store.list("operation") if r["task_id"] == task_id],
+            "operations": [r for r in self.store.list("operation") if active(r)],
             "imagegen_requests": public_requests(self, task_id),
-            "production_decisions": [r for r in self.store.list("production_decision") if r["task_id"] == task_id],
+            "production_decisions": [r for r in self.store.list("production_decision") if active(r)],
             "production_sessions": sessions,
             "agent_traces": sorted(
-                [r for r in self.store.list("agent_trace") if r["task_id"] == task_id],
+                [r for r in self.store.list("agent_trace") if active(r)],
                 key=lambda row: (row["created_at"], row["id"]),
             ),
-            "conversations": self.collaboration.list(task_id),
+            "conversations": [r for r in self.collaboration.list(task_id) if active(r)],
             "route_autonomy": self.store.get("route_policy", task_id),
             "route_status": self.store.get("route_status", task_id),
+            "task_route_events": route_events[-30:],
+            "route_report": report(task, route_events),
         }
 
     def update_node(self, task_id, node_id, **changes):
@@ -329,6 +360,7 @@ class TaskService:
             "status": "open",
             "answer": None,
             "created_at": now(),
+            "owner": "route",
         }
         self.store.put("question", record)
         return record
@@ -366,7 +398,7 @@ class TaskService:
                 else:
                     node.update(
                         status="failed",
-                        error="人工审核未通过；填写的意见将在重试时用于返工",
+                        error="人工审核未通过；意见已交 Route 核对并安排有界返工，已有暂停保留",
                         output={
                             **node["output"],
                             "human_rejected": True,
@@ -383,7 +415,11 @@ class TaskService:
                 task["brief_revision"] = task.get("brief_revision", 0) + 1
                 node["output"].pop("_wait", None)
             else:
-                node.update(status="pending", output={**node["output"], "user_answer": answer}, error=None)
+                if question["kind"] == "route":
+                    if answer not in question["options"]:
+                        raise ValueError("请选择当前 Route 问题的一个选项")
+                else:
+                    node.update(status="pending", output={**node["output"], "user_answer": answer}, error=None)
             question.update(status="answered", answer=answer, feedback=feedback, answered_at=now())
             task.update(status=task_status(task), updated_at=now())
             for kind, value in (("question", question), ("task", task)):
@@ -391,6 +427,17 @@ class TaskService:
                     "UPDATE records SET data=? WHERE kind=? AND id=?",
                     (json.dumps(value, ensure_ascii=False), kind, value["id"]),
                 )
+            if (question["kind"] == "review" and answer == "reject") or question["kind"] == "route":
+                from copy import copy
+                from .task_supervision import report_work
+                from video_translation.persistence.transaction import TransactionStore
+                local = copy(self)
+                local.store = TransactionStore(self.store, db)
+                event = report_work(local, task_id, node["id"],
+                                    trigger="human_rejected" if question["kind"] == "review" else "user_answer",
+                                    message_id=question_id)
+                if question["kind"] == "route":
+                    local.store.update("task_route_event", event["id"], lambda e: e.update(answer=answer))
         return self.detail(task_id)
 
     def commit_delivery(self, task_id, node_id, delivery, digest):
@@ -430,6 +477,10 @@ class TaskService:
     def recover(self):
         from .agent_recovery import replaced_with_authorization
         self.collaboration.recover()
+        for event in self.store.list("task_route_event"):
+            if event["status"] == "running":
+                self.store.update("task_route_event", event["id"], lambda e: e.update(
+                    status="unknown", reason="Route was interrupted; original result must be reconciled"))
         for record in self.store.list("operation"):
             if record["status"] == "running":
                 self.store.update(
@@ -471,4 +522,11 @@ class TaskService:
                 tx = TransactionStore(self.store, db)
                 recovery_service = SimpleNamespace(
                     store=tx, settings=self.settings, hash_file=self.hash_file)
-                tx.update("task", task["id"], mutate)
+                recovered = tx.update("task", task["id"], mutate)
+                if recovered.get("visual_route") == "agent_adaptive":
+                    from .task_supervision import reconcile_work_reports, report_work
+                    for node in recovered["nodes"]:
+                        if node["status"] == "failed" and node.get("stage_readiness") == "needs_repair":
+                            report_work(recovery_service, task["id"], node["id"],
+                                        trigger="startup_quality_gate")
+                    reconcile_work_reports(recovery_service, task["id"])

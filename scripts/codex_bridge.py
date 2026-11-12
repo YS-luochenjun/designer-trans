@@ -25,6 +25,7 @@ import time
 
 # Also supports importlib loading in tests without installing scripts as a package.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from harness_bridge import (  # noqa: E402
     BridgeError,
     ProcessTree,
@@ -279,7 +280,7 @@ def invoke_with_events(argv, env, cwd, end, stdin, recorder):
             read_events(process.stdout, recorder)
         except Exception:
             reader_errors.append(True)
-            recorder.invalidate()
+            recorder.invalidate("event_reader_error")
 
     def diagnostics():
         while chunk := process.stderr.read1(16384):
@@ -307,7 +308,7 @@ def invoke_with_events(argv, env, cwd, end, stdin, recorder):
         for thread in threads:
             thread.join(timeout=max(0, drain_end - time.monotonic()))
         if reader_errors or threads[0].is_alive():
-            recorder.invalidate()
+            recorder.invalidate("event_reader_error" if reader_errors else "event_drain_timeout")
         recorder.observe_failure(bytes(tail).decode("utf-8", errors="replace"), fallback=True)
         recorder.save()
     return subprocess.CompletedProcess(argv, process.returncode, stderr=bytes(tail))

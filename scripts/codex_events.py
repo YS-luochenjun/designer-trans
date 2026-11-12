@@ -8,7 +8,9 @@ from pathlib import Path
 import re
 
 from harness_bridge import BridgeError, MAX_OUTPUT, atomic_json, load_json, validate_answer
-from video_translation.integrations.agents.failure_evidence import extract_failure_evidence
+from video_translation.integrations.agents.failure_evidence import (
+    EVENT_INVALID_REASONS, EVENT_TYPES, extract_failure_evidence,
+)
 
 MAX_EVENT = MAX_OUTPUT * 2 + 65536
 FAILURE_KINDS = {
@@ -32,6 +34,9 @@ FAILURE_CODES = {
     "invalid_json_schema": "request_rejected",
     "model_not_found": "request_rejected",
     "request_too_large": "request_rejected",
+    "invalid_image": "request_rejected",
+    "invalid_image_format": "request_rejected",
+    "image_too_large": "request_rejected",
     "server_error": "provider_unavailable",
 }
 
@@ -39,10 +44,12 @@ FAILURE_CODES = {
 def failure_kind(text: str) -> str:
     """Return fixed categories only; never retain provider text, URLs or credentials."""
     # A specific code can explain a generic HTTP 400 or invalid_request_error type.
-    for field in ("code", "type"):
+    for field in ("code",):
         for code in re.findall(rf"""["']{field}["']\s*:\s*["']([a-z_]+)["']""", text):
             if code in FAILURE_CODES:
                 return FAILURE_CODES[code]
+    if extract_failure_evidence(text).get("provider_failure_reason") == "context_length":
+        return "context_limit"
     status = re.search(r"(?:status(?:\s+code)?[:\s]+|HTTP[/\d.]*\s+)([45]\d\d)\b", text, re.I)
     if status:
         code = int(status[1])
@@ -64,6 +71,9 @@ def failure_kind(text: str) -> str:
         return "transport"
     if any(x in lower for x in ("error loading config.toml:", "no space left", "os error", "permission denied")):
         return "cli_local"
+    for code in re.findall(r"""["']type["']\s*:\s*["']([a-z_]+)["']""", text):
+        if code in FAILURE_CODES:
+            return FAILURE_CODES[code]
     return "unknown"
 
 
@@ -84,6 +94,7 @@ class EventRecorder:
         self.thread_id = None
         self.failure_fingerprint = None
         self.provider_details = {}
+        self.invalid_details = {}
 
     def summary(self):
         return {
@@ -92,6 +103,7 @@ class EventRecorder:
             **({"cli_thread_id": self.thread_id} if self.thread_id else {}),
             **({"failure_message_sha256": self.failure_fingerprint} if self.failure_fingerprint else {}),
             **self.provider_details,
+            **self.invalid_details,
         }
 
     def observe_failure(self, message, *, fallback=False):
@@ -111,7 +123,15 @@ class EventRecorder:
             "request_sha256": self.request_sha256, **self.summary(),
         })
 
-    def invalidate(self):
+    def invalidate(self, reason="unknown", *, event_type=None):
+        if not self.malformed:
+            self.invalid_details = {
+                "event_invalid_reason": reason if reason in EVENT_INVALID_REASONS else "unknown",
+                "event_invalid_index": self.count,
+            }
+            if event_type is not None:
+                self.invalid_details["event_invalid_type"] = (
+                    event_type if event_type in EVENT_TYPES else "other")
         self.state, self.malformed, self.answer = "invalid", True, None
         (self.root / "event-result.json").unlink(missing_ok=True)
 
@@ -123,13 +143,13 @@ class EventRecorder:
             if not isinstance(event, dict) or not isinstance(event.get("type"), str):
                 raise ValueError
         except (ValueError, UnicodeError, RecursionError):
-            self.invalidate()
+            self.invalidate("malformed_event")
             self.save()
             return
         kind = event["type"]
         if kind == "thread.started":
             if self.thread_seen or self.state != "not_started":
-                self.invalidate()
+                self.invalidate("duplicate_thread", event_type=kind)
             self.thread_seen = True
             identifier = event.get("thread_id")
             if isinstance(identifier, str) and re.fullmatch(
@@ -137,7 +157,7 @@ class EventRecorder:
                 self.thread_id = identifier
         elif kind == "turn.started":
             if not self.thread_seen or self.turn_seen:
-                self.invalidate()
+                self.invalidate("invalid_turn_start", event_type=kind)
             elif self.state != "invalid":
                 self.state = "started"
             self.turn_seen = True
@@ -150,12 +170,12 @@ class EventRecorder:
                 if isinstance(item.get("message"), str):
                     self.observe_failure(item["message"])
             elif self.state != "started" or not isinstance(item, dict):
-                self.invalidate()
+                self.invalidate("item_outside_turn", event_type=kind)
             else:
                 self.last_item = item.get("type") if item.get("type") in ITEM_KINDS else "other"
                 identifier = item.get("id")
                 if not isinstance(identifier, str) or len(identifier) > 128 or len(self.pending) >= 256:
-                    self.invalidate()
+                    self.invalidate("invalid_item", event_type=kind)
                 elif kind in {"item.started", "item.updated"}:
                     self.pending.add(identifier)
                     self.answer = None
@@ -167,10 +187,10 @@ class EventRecorder:
                                    and isinstance(text, str)
                                    and len(text.encode("utf-8")) <= MAX_OUTPUT else None)
                 else:
-                    self.invalidate()
+                    self.invalidate("unsupported_item_event", event_type=kind)
         elif kind == "turn.completed":
             if self.state != "started" or self.pending:
-                self.invalidate()
+                self.invalidate("invalid_turn_end", event_type=kind)
             else:
                 self.state = "completed"
                 if self.answer is not None and self.last_item == "agent_message":
@@ -190,18 +210,22 @@ class EventRecorder:
             message = event.get("message")
             if kind == "turn.failed":
                 error = event.get("error")
-                message = error.get("message") if isinstance(error, dict) else None
+                message = (json.dumps({k: error[k] for k in ("message", "code", "type")
+                                       if isinstance(error.get(k), str)}, ensure_ascii=False)
+                           if isinstance(error, dict) and any(
+                               k in error for k in ("code", "type")) else
+                           error.get("message") if isinstance(error, dict) else None)
                 if self.state == "started":
                     self.state = "failed"
                 else:
-                    self.invalidate()
+                    self.invalidate("unexpected_failure", event_type=kind)
                 self.answer = None
                 (self.root / "event-result.json").unlink(missing_ok=True)
             if isinstance(message, str):
                 self.observe_failure(message)
         else:
             # A changed event contract cannot certify an answer.
-            self.invalidate()
+            self.invalidate("unsupported_event", event_type=kind)
         if previous != self.summary():
             self.save()
 
@@ -211,7 +235,7 @@ def read_events(pipe, recorder: EventRecorder):
         if len(raw) > MAX_EVENT:
             while raw and not raw.endswith(b"\n"):
                 raw = pipe.readline(65536)
-            recorder.invalidate()
+            recorder.invalidate("oversized_event")
             recorder.save()
         else:
             recorder.consume(raw)

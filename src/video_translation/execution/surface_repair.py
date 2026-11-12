@@ -108,4 +108,4 @@ def restore_surface(visual, source, target, *, start_ms, end_ms, envelope, recip
                                          for a, b in zip(left_pixel, right_pixel))
         frame.paste(patch, (x, y), mask.crop((x, y, right, bottom)))
 
-    return visual._render(source, target, info, transform)
+    return visual._render_window(source, target, info, transform, start_ms, end_ms)

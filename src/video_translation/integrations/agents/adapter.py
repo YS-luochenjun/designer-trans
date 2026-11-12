@@ -18,6 +18,14 @@ from .schema import provider_schema as _provider_schema
 from .failure_evidence import safe_failure_evidence
 
 
+def execution_profile_for(stage, packet, command):
+    production_stages = {"observe", "visual_analyze", "clean", "translate", "plan",
+                         "audio_voice", "typography", "visual", "audio", "review", "imagegen"}
+    return ("work" if stage in production_stages
+            and packet.get("inputs", {}).get("agent_role") == "work"
+            and any(Path(x).name == "codex_bridge.py" for x in command) else "structured")
+
+
 @dataclass
 class AgentConfig:
     mode: str = "unconfigured"
@@ -206,11 +214,7 @@ class AgentAdapter:
                         {
                             "stage": stage,
                             "workspace_root": str(directory.resolve()),
-                            "execution_profile": (
-                                "work" if stage in {"clean", "imagegen"}
-                                and packet.get("inputs", {}).get("agent_role") == "work"
-                                and any(Path(x).name == "codex_bridge.py" for x in cfg.command)
-                                else "structured"),
+                            "execution_profile": execution_profile_for(stage, packet, cfg.command),
                             "system_prompt": cfg.system_prompt
                             + ("\n\n" + instruction if instruction else ""),
                             "packet": {key: value for key, value in packet.items() if key != "instruction"},
@@ -334,6 +338,16 @@ class AgentAdapter:
                         "cli_local": "CLI本地执行错误",
                     }.get(receipt.get("failure_kind"))
                     if cause:
+                        detail = {
+                            "context_length": "输入上下文长度超限",
+                            "image_count": "单次图片数量超限",
+                            "image_format": "图片格式被拒绝",
+                            "schema_contract": "结构化输出合同被拒绝",
+                            "payload_size": "请求载荷过大",
+                            "unsupported_parameter": "请求包含不支持的参数",
+                        }.get(receipt.get("provider_failure_reason"))
+                        if detail:
+                            cause += "：" + detail
                         code = receipt.get("cli_exit_code", receipt.get("exit_code", process.returncode))
                         raise UnknownExternalResult(
                             f"Agent：{cause}（CLI退出{code}）；已保留回执，调用与费用仍待核对，不自动重投")

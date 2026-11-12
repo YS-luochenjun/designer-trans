@@ -35,7 +35,10 @@ function WorkflowNode({ data, selected }: NodeProps<DiagramNode>) {
     }}
     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); data.onSelect(node.id); } }}>
     <Handle type="target" position={Position.Top} />
-    <div className="workflow-node-top"><span>{data.role ?? node.locale ?? "原片共享"}</span><Status value={node.status} /></div>
+    <div className="workflow-node-top"><span>{data.role ?? node.locale ?? "原片共享"}</span>
+      {node.route_state && ["failed", "interrupted", "waiting_user"].includes(node.status)
+        ? <span className="status">Route {node.route_state === "running" ? "协调中" :
+          node.route_state === "blocked" ? "遇到阻塞" : "待处理"}</span> : <Status value={node.status} />}</div>
     <strong className="workflow-node-label" data-testid="workflow-node-label" title={label}>{label}</strong>
     <div className="workflow-node-foot" title={node.error || data.activity || node.skip_reason || ""}>
       <span title={data.activity}>{data.progress}</span>
@@ -61,7 +64,7 @@ const nodeTypes = { workflow: WorkflowNode };
 const edgeTypes = { dependency: DependencyEdge };
 
 export function WorkflowGraph({ nodes, assets = [], traces = [], sessions = [], selected, onSelect }: Props) {
-  nodes = nodes.map(node => node.definition_id === "clean" &&
+  nodes = nodes.map(node => node.definition_id === "clean" && node.status === "succeeded" &&
     (node.output.completion_state === "best_available" || node.output.quality_passed === false)
     ? { ...node, status: "failed", error: "清底未完成；旧接续记录不代表质量通过" } : node);
   const [inside, setInside] = useState<string | null>(null);
@@ -87,7 +90,7 @@ export function WorkflowGraph({ nodes, assets = [], traces = [], sessions = [], 
   return <section className="workflow-graph" data-testid="workflow-graph" aria-label="任务流程图">
     <div className="workflow-scope">
       {parent && <button className="subflow-back" onClick={() => setInside(null)}>‹ 主流程</button>}
-      {parent ? <><strong className="workflow-source">{parent.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")}</strong><span className="workflow-progress">内部步骤 · 回路示意</span></> : <>
+      {parent ? <><strong className="workflow-source">{parent.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")}</strong><span className="workflow-progress">Work 自主选法 · 程序核验与调度 · 状态示意</span></> : <>
       {assetIds.length > 1 ? <Select aria-label="流程图原片" value={assetId} onChange={(event) => { setAssetChoice(event.target.value); onSelect(""); }}>
         {assetIds.map((id) => <option key={id} value={id}>{sourceName(id)}</option>)}
       </Select> : <span className="workflow-source" title={assetId ? sourceName(assetId) : ""}>{assetId ? sourceName(assetId) : "执行流程"}</span>}

@@ -30,7 +30,14 @@ Worker -> Agent 决策 -> 受约束的工具与媒体执行
 | `integrations` | Agent、媒体服务与外部需求系统的适配 |
 | `interfaces` | CLI、HTTP 接口与运行状态 |
 
-制作路线位于 `execution/clean_routing.py`。技术恢复位于 `application/route_recovery.py`，只执行当前委托允许的恢复动作。Route 不是修改项目源码的维护 Agent。
+制作路线位于 `execution/clean_routing.py`，任务监督位于 `execution/task_supervisor.py`。
+技术恢复位于 `application/route_recovery.py`，只执行当前委托允许的恢复动作。
+Route 管理 Work 与用户沟通，缺代码能力时留下明确诊断，维护开发独立进行。
+
+正常成功按程序依赖继续，方向变更、确定失败与审核不通过交 Route 有界协调。
+音频与画面 Work 可在前置条件满足后并行，消息有独立队列。
+工作单绑定依赖输出与素材、语言，清底长历史使用可追溯投影。
+角色、报备恢复和加载边界见 [Route 与 Work](architecture/route-work.md)。
 
 ## 统一媒体执行
 

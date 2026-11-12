@@ -1,4 +1,54 @@
 {
+  "$defs": {
+    "ResourceBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "max_workspace_bytes": {
+          "default": 2147483648,
+          "exclusiveMinimum": 0,
+          "maximum": 274877906944,
+          "title": "Max Workspace Bytes",
+          "type": "integer"
+        },
+        "max_workspace_files": {
+          "default": 10000,
+          "exclusiveMinimum": 0,
+          "maximum": 200000,
+          "title": "Max Workspace Files",
+          "type": "integer"
+        },
+        "min_free_bytes": {
+          "default": 1073741824,
+          "minimum": 0,
+          "title": "Min Free Bytes",
+          "type": "integer"
+        },
+        "max_external_calls": {
+          "default": 80,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Max External Calls",
+          "type": "integer"
+        },
+        "max_recovery_calls": {
+          "default": 8,
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Max Recovery Calls",
+          "type": "integer"
+        },
+        "max_clean_turns": {
+          "default": 48,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Max Clean Turns",
+          "type": "integer"
+        }
+      },
+      "title": "ResourceBudget",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "max_kie_credits": {
@@ -146,6 +196,15 @@
       "title": "Audio Strategy",
       "type": "string"
     },
+    "output_goal": {
+      "default": "complete_candidate",
+      "enum": [
+        "complete_candidate",
+        "quality_approved"
+      ],
+      "title": "Output Goal",
+      "type": "string"
+    },
     "allow_review_draft": {
       "default": false,
       "title": "Allow Review Draft",
@@ -156,6 +215,9 @@
       "default": "efficient_v1",
       "title": "Execution Profile",
       "type": "string"
+    },
+    "resource_budget": {
+      "$ref": "#/$defs/ResourceBudget"
     }
   },
   "required": [

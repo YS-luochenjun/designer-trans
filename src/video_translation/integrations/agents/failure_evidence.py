@@ -10,6 +10,20 @@ ERROR_CODES = {
     "server_error", "invalid_image", "invalid_image_format", "image_too_large",
 }
 ERROR_TYPES = ERROR_CODES | {"api_error", "requests", "tokens"}
+FAILURE_REASONS = {
+    "context_length", "image_count", "image_format", "schema_contract", "payload_size",
+    "unsupported_parameter",
+}
+EVENT_INVALID_REASONS = {
+    "unknown", "malformed_event", "duplicate_thread", "invalid_turn_start",
+    "item_outside_turn", "invalid_item", "unsupported_item_event", "invalid_turn_end",
+    "unexpected_failure", "unsupported_event", "oversized_event",
+    "event_reader_error", "event_drain_timeout",
+}
+EVENT_TYPES = {
+    "thread.started", "turn.started", "turn.completed", "turn.failed", "error",
+    "item.started", "item.updated", "item.completed", "other",
+}
 
 
 def safe_failure_evidence(value):
@@ -20,6 +34,16 @@ def safe_failure_evidence(value):
     status = value.get("provider_http_status")
     if type(status) is int and 400 <= status <= 599:
         result["provider_http_status"] = status
+    if (isinstance(value.get("provider_failure_reason"), str)
+            and value["provider_failure_reason"] in FAILURE_REASONS):
+        result["provider_failure_reason"] = value["provider_failure_reason"]
+    for key, allowed in (("event_invalid_reason", EVENT_INVALID_REASONS),
+                         ("event_invalid_type", EVENT_TYPES)):
+        if isinstance(value.get(key), str) and value[key] in allowed:
+            result[key] = value[key]
+    index = value.get("event_invalid_index")
+    if type(index) is int and 0 <= index <= 1_000_000:
+        result["event_invalid_index"] = index
     return result
 
 
@@ -34,4 +58,17 @@ def extract_failure_evidence(text):
     status = re.search(r"(?:status(?:\s+code)?[:\s]+|HTTP[/\d.]*\s+)([45]\d\d)\b", text, re.I)
     if status:
         result["provider_http_status"] = int(status[1])
+    lower = text.lower()
+    # Fixed diagnostic categories only; neither provider prose nor URLs leave here.
+    for reason, patterns in (
+        ("context_length", ("context_length_exceeded", "maximum context length", "context window")),
+        ("image_count", ("too many images", "maximum number of images", "image count limit")),
+        ("image_format", ("invalid image", "unsupported image format", "invalid_image")),
+        ("schema_contract", ("invalid_json_schema", "invalid schema", "unsupported schema")),
+        ("payload_size", ("request too large", "payload too large", "request_too_large")),
+        ("unsupported_parameter", ("unsupported_parameter", "unsupported parameter")),
+    ):
+        if any(pattern in lower for pattern in patterns):
+            result["provider_failure_reason"] = reason
+            break
     return result

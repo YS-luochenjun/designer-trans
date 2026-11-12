@@ -111,8 +111,8 @@ class LetteringProduction(AdaptiveProduction):
 
     def render(self,plan):
         clean=self.e.output(self.task,self.node,'clean')
-        from .stage_quality import require_clean_plate
-        require_clean_plate(clean, self.task)
+        from .stage_quality import require_production_base
+        require_production_base(clean, self.task)
         base=self.verified(clean)
         layers=self.layers(plan)
         completion = self.task.get('production_policy', {}).get('mode') == 'stage_verified'
@@ -228,8 +228,8 @@ class LetteringProduction(AdaptiveProduction):
         return result
 
     def typography(self):
-        from .stage_quality import require_clean_plate
-        require_clean_plate(self.e.output(self.task,self.node,'clean'), self.task)
+        from .stage_quality import require_production_base
+        require_production_base(self.e.output(self.task,self.node,'clean'), self.task)
         plan=self.e.output(self.task,self.node,'plan')['lettering']
         if not plan:
             clean=self.e.output(self.task,self.node,'clean')
@@ -287,8 +287,8 @@ class LetteringProduction(AdaptiveProduction):
 
     def visual(self):
         result=self.e.output(self.task,self.node,'typography')
-        from .stage_quality import require_clean_plate
-        require_clean_plate(self.e.output(self.task,self.node,'clean'), self.task)
+        from .stage_quality import require_production_base
+        require_production_base(self.e.output(self.task,self.node,'clean'), self.task)
         from .review_draft import is_review_draft
         draft = is_review_draft(result, self.task)
         if not self.texts:

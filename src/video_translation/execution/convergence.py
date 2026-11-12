@@ -72,6 +72,10 @@ def yield_assignment(controller, state, summary, incident):
 
 def binding(controller, state):
     from .clean_contract import execution_contract
+    profile = ExecutionProfile.model_validate(controller.task.get("execution_snapshot", {}))
+    execution = profile.model_dump()
+    if profile.resource_budget is None:
+        execution.pop("resource_budget")
     return {"base_sha256": state["base"]["sha256"],
             "scope_sha256": identity(controller.texts),
             "capability_sha256": identity({
@@ -79,8 +83,7 @@ def binding(controller, state):
                 "contract": execution_contract(),
                 "model": controller.task.get("model_snapshot"),
                 "resources": controller.task.get("resource_snapshot"),
-                "execution": ExecutionProfile.model_validate(
-                    controller.task.get("execution_snapshot", {})).model_dump(),
+                "execution": execution,
             })}
 
 
@@ -106,10 +109,17 @@ def guard(controller, state, summary):
     checkpoint["actions"] = state["turn"] - checkpoint["start_turn"]
     profile = ExecutionProfile.model_validate(controller.task.get("execution_snapshot", {}))
     # Let the existing finite Route frontier select another untried assignment.
-    if (summary.get("all_deferred") and not state.get("candidate")
-            and state.get("pending_turn") is None and not controller.node.get("external_pending")):
-        return
+    deferred_ready = (summary.get("all_deferred") and not state.get("candidate")
+                      and state.get("pending_turn") is None
+                      and not controller.node.get("external_pending"))
     if checkpoint["actions"] < profile.max_unchanged_actions:
+        return
+    from .review_draft import complete_candidate
+    if complete_candidate(controller.task):
+        from .clean_supervision import request
+        request(controller, state, "progress_review",
+                "The base is unchanged; Route must assess useful next work or a complete viewing candidate",
+                basis={"checkpoint": key})
         return
     incident = state.setdefault("execution_incidents", {}).setdefault(key, {
         "id": key, "kind": "no_base_progress", **inputs, "node_id": controller.node["id"],
@@ -123,30 +133,45 @@ def guard(controller, state, summary):
                    "invalidates_downstream": ["typography", "visual", "compose", "review"],
                    "requires": "New bound evidence/capability and explicit application decision"},
     })
-    state["routing_stop"] = {"incident_id": incident["id"], "reason": ERROR}
     if yield_assignment(controller, state, summary, incident):
         return
+    if deferred_ready:
+        return
+    state["routing_stop"] = {"incident_id": incident["id"], "reason": ERROR}
     controller.store.put("production_session", state)
     raise CapabilityUnavailable(state["routing_stop"]["reason"])
+
+
+def operative_action(value):
+    if isinstance(value, dict):
+        return {k: operative_action(v) for k, v in value.items()
+                if k not in {"reason", "evidence", "process_findings", "quality"}}
+    if isinstance(value, list):
+        return [operative_action(v) for v in value]
+    return value
 
 
 def reserve_action(controller, state, action, *, resuming=False):
     """A rephrased failed repair cannot create another local or paid dispatch."""
     if action["action"] != "repair":
         return
-    def operative(value):
-        if isinstance(value, dict):
-            return {k: operative(v) for k, v in value.items()
-                    if k not in {"reason", "evidence", "process_findings", "quality"}}
-        if isinstance(value, list):
-            return [operative(v) for v in value]
-        return value
-
-    semantic = operative(action)
+    semantic = operative_action(action)
     item = controller.texts.get(action.get("source_id"), {})
     for field in ("start_ms", "end_ms", "region"):
         if semantic.get(field) is None and field in item:
             semantic[field] = item[field]
+    if state.get("new_execution"):
+        for history in state.get("history", []):
+            if (history["turn"] >= state["new_execution"]["start_turn"]
+                    or history.get("input_base_sha256") != state["base"]["sha256"]
+                    or history["decision"].get("action") != "repair"):
+                continue
+            previous_action = operative_action(history["decision"])
+            for field in ("start_ms", "end_ms", "region"):
+                if previous_action.get(field) is None and field in item:
+                    previous_action[field] = item[field]
+            if previous_action == semantic:
+                raise CapabilityUnavailable("Explicit new execution does not replay an identical original repair")
     key = identity({**binding(controller, state), "action": semantic})
     attempts = state.setdefault("execution_action_intents", {})
     previous = attempts.get(key)

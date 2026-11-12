@@ -200,13 +200,23 @@ class SpeechRevision(Contract):
     reason: str = Field(min_length=1, max_length=1600)
 
 
+class CleanStopAssessment(Contract):
+    source_id: str = Field(min_length=1)
+    disposition: Literal["blocked", "actionable"]
+    reason: str = Field(min_length=1, max_length=1200)
+    considered_methods: list[str] = Field(default_factory=list, max_length=20)
+    evidence: list[str] = Field(min_length=1, max_length=10)
+
+
 class CleanRouteDecision(Contract):
     action: Literal["assign_work", "blocked"]
     reason: str = Field(min_length=1, max_length=2400)
     source_id: str | None = None
-    method: Literal["local_surface", "tracked_donor", "inspect", "image_reference", "reference_plate"] | None = None
+    method: Literal["flat", "donor", "local_surface", "tracked_donor", "inspect",
+                    "image_edit", "wan", "image_reference", "reference_plate"] | None = None
     question: str = Field(default="", max_length=2400)
     evidence: list[str] = Field(min_length=1, max_length=20)
+    remaining_assessments: list[CleanStopAssessment] = Field(default_factory=list, max_length=1000)
 
 
 PRODUCTION_CONTRACTS = {"agent/source-design": SourceDesign, "agent/clean-action": CleanAction,

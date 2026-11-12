@@ -17,4 +17,7 @@ def replaced_with_authorization(store, record, kind):
     if bound and authorization.get("scope") == "one_new_visual_review":
         from .visual_recovery import valid_supersession
         return valid_supersession(store, authorization)
+    if bound and authorization.get("scope") == "one_new_clean_route":
+        from .clean_route_recovery import valid_supersession
+        return valid_supersession(store, authorization)
     return bound

@@ -39,6 +39,11 @@
       "default": false,
       "title": "Recover Observation Context",
       "type": "boolean"
+    },
+    "recover_production_route": {
+      "default": false,
+      "title": "Recover Production Route",
+      "type": "boolean"
     }
   },
   "required": [

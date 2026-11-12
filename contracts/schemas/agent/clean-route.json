@@ -1,4 +1,55 @@
 {
+  "$defs": {
+    "CleanStopAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "minLength": 1,
+          "title": "Source Id",
+          "type": "string"
+        },
+        "disposition": {
+          "enum": [
+            "blocked",
+            "actionable"
+          ],
+          "title": "Disposition",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 1200,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "considered_methods": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Considered Methods",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_id",
+        "disposition",
+        "reason",
+        "evidence"
+      ],
+      "title": "CleanStopAssessment",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "action": {
@@ -31,9 +82,13 @@
       "anyOf": [
         {
           "enum": [
+            "flat",
+            "donor",
             "local_surface",
             "tracked_donor",
             "inspect",
+            "image_edit",
+            "wan",
             "image_reference",
             "reference_plate"
           ],
@@ -59,6 +114,14 @@
       "maxItems": 20,
       "minItems": 1,
       "title": "Evidence",
+      "type": "array"
+    },
+    "remaining_assessments": {
+      "items": {
+        "$ref": "#/$defs/CleanStopAssessment"
+      },
+      "maxItems": 1000,
+      "title": "Remaining Assessments",
       "type": "array"
     }
   },

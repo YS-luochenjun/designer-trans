@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "EvidenceWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "start_ms": {
+          "minimum": 0,
+          "title": "Start Ms",
+          "type": "integer"
+        },
+        "end_ms": {
+          "exclusiveMinimum": 0,
+          "title": "End Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "start_ms",
+        "end_ms"
+      ],
+      "title": "EvidenceWindow",
+      "type": "object"
+    },
+    "RouteIssue": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "visual_evidence",
+            "audio_evidence",
+            "user_intent",
+            "capability"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "detail": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Detail",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "detail"
+      ],
+      "title": "RouteIssue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "action": {
+      "enum": [
+        "delegate_observation",
+        "ask_user",
+        "blocked"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "reason": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Reason",
+      "type": "string"
+    },
+    "issues": {
+      "items": {
+        "$ref": "#/$defs/RouteIssue"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Issues",
+      "type": "array"
+    },
+    "windows": {
+      "items": {
+        "$ref": "#/$defs/EvidenceWindow"
+      },
+      "maxItems": 2,
+      "title": "Windows",
+      "type": "array"
+    },
+    "work_order": {
+      "default": "",
+      "maxLength": 3000,
+      "title": "Work Order",
+      "type": "string"
+    },
+    "question": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Question",
+      "type": "string"
+    }
+  },
+  "required": [
+    "action",
+    "reason",
+    "issues"
+  ],
+  "title": "ObservationRouteDecision",
+  "type": "object",
+  "$id": "urn:video-translation:agent/observation-route:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

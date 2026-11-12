@@ -24,6 +24,8 @@ from .scope_review import pending_scope_review, confirm_scope_review
 from .acceptance_disputes import dispute_acceptance
 from .clean_contract import execution_contract
 from .clean_experience import method_advisories, record_local_experience
+from .temporal_work import temporal_work_orders
+from video_translation.application.task_storage import retired_candidates
 
 
 def digest(value):
@@ -97,6 +99,7 @@ class AdaptiveProduction:
     def candidate_times(self, candidate):
         _, clock = self.media._info(self.source)
         first, stop = frame_window(candidate['start_ms'], candidate['end_ms'], clock['rate'])
+        stop = min(stop, clock['frames'])
         indices = set(boundary_indices(candidate['start_ms'], candidate['end_ms'],
                                        clock['rate'], clock['frames']))
         indices.update(first + (stop - 1 - first) * i // 4 for i in range(1, 4))
@@ -131,6 +134,9 @@ class AdaptiveProduction:
         pipeline = candidate.get('pipeline')
         if not pipeline:
             raise ValueError('候选没有已登记的模型链路文件；保留候选并请求本地诊断')
+        if pipeline.get('media_type') == 'still_image':
+            from .image_pipeline import still_frames
+            return still_frames(self, pipeline)
         requested = self.pipeline_sample_times(candidate, requested or [])
         result = []
         for key, label in (('input', '模型输入'), ('generated', '模型原始返回'),
@@ -176,8 +182,15 @@ class AdaptiveProduction:
         from video_translation.persistence.transaction import TransactionStore
 
         self.active()
+        from video_translation.application.task_supervision import live_directions
+        directions = live_directions(self.service, self.task["id"], self.node["id"])
+        if directions:
+            inputs = {**inputs, "route_directions": directions}
+        self._sent_directions = digest(directions)
         from video_translation.application.visual_recovery import decision_key, reserve_decision
         key = decision_key(self.store, self.task, self.node, key)
+        from video_translation.application import clean_route_recovery
+        key = clean_route_recovery.decision_key(self.store, self.task, self.node, key)
         identity = digest({'task': self.task['id'], 'node': self.node['id'], 'key': key,
                            'inputs': inputs, 'schema': model.model_json_schema(),
                            'resources': self.task.get('resource_snapshot'),
@@ -194,6 +207,8 @@ class AdaptiveProduction:
             transaction = TransactionStore(self.store, connection)
             from video_translation.application.agent_recovery import replaced_with_authorization
             reserve_decision(self.service, transaction, self.task, self.node, key, identity, inputs)
+            clean_route_recovery.reserve_decision(
+                self.service, transaction, self.task, self.node, key, identity, inputs)
             previous = transaction.get('production_decision', identity)
             if previous and previous['status'] == 'succeeded':
                 return model.model_validate(previous['result']).model_dump()
@@ -345,7 +360,11 @@ class AdaptiveProduction:
                                          state['draft_handoff']['sha256']) != state['base']['sha256']:
                 raise CapabilityUnavailable('审看草稿基底变化，须核对新结果')
             return state['draft_handoff']
-        if any(a.get('boundary_review') for a in state['accepted']):
+        from ..application.materialization_recovery import resume_handoff
+        recovered = resume_handoff(self, state)
+        if recovered is not None:
+            return recovered
+        if not state.get('coverage_clock'):
             _, coverage_clock = self.media._info(self.source)
             state['coverage_clock'] = {k: coverage_clock[k] for k in ('rate', 'frames')}
         if state['finished']:
@@ -366,12 +385,24 @@ class AdaptiveProduction:
             self.active()
             if self.store.require('task', self.task['id']).get('control_paused'):
                 return {'_paused': True}
+            from .resource_budget import guard_clean_turn, guard_storage
+            guard_clean_turn(self.task, state)
+            guard_storage(self.service, self.task)
             summary = progress(self.texts, state)
             from .convergence import guard as guard_convergence
             guard_convergence(self, state, summary)
             from .review_draft import bound_work
             bound_work(self, state, summary)
             summary = progress(self.texts, state)
+            from .work_conclusions import preserve_output_reserve
+            if preserve_output_reserve(self, state):
+                return handoff(self, state, summary)
+            from .clean_supervision import pending as pending_feedback, acknowledge
+            feedback = pending_feedback(self, state)
+            if (state.get('completion_feedback_stop', {}).get('execution_binding') == state.get('execution_binding')
+                    and state.get('completion_feedback_stop') and not feedback):
+                state['routing_stop'] = state['completion_feedback_stop']
+                return handoff(self, state, summary)
             scope_review = None
             if (not state.get('candidate') and state.get('pending_turn') is None
                     and not self.node.get('external_pending') and not state.get('archive_review')
@@ -380,11 +411,14 @@ class AdaptiveProduction:
                 scope_review = pending_scope_review(self.texts, state, scope_clock)
                 if scope_review:
                     state['times_ms'] = scope_review['times_ms']
-            if (summary['all_deferred'] and not state.get('candidate')
+            if ((summary['all_deferred'] and not state.get('candidate') or feedback)
                     and state.get('pending_turn') is None and not self.node.get('external_pending')
                     and not state.get('archive_review') and not scope_review):
                 from .clean_routing import route_deferred
-                if route_deferred(self, state, summary):
+                assigned = route_deferred(self, state, {**summary, 'work_feedback': feedback})
+                if feedback:
+                    acknowledge(self, state, feedback, assigned)
+                if assigned:
                     continue
                 state['progress'] = summary
                 self.store.put('production_session', state)
@@ -399,7 +433,7 @@ class AdaptiveProduction:
             turn = state['turn']
             base = self.verified(state['base'])
             comparison = self.verified(state['candidate']) if state['candidate'] else base
-            if state['candidate']:
+            if state['candidate'] and not state.get('archive_review') and not state.get('pipeline_review'):
                 # Eight timestamps * three videos fit the 24-image agent contract.
                 _, clock = self.media._info(self.source)
                 required_times = [request_time(i, clock['rate']) for i in boundary_indices(
@@ -408,7 +442,8 @@ class AdaptiveProduction:
                 state['times_ms'] = sorted(set(required_times + [
                     t for t in state['times_ms'] if t not in required_times][:8-len(required_times)]))
             from .inspection_evidence import normal_frames
-            frames = normal_frames(self, state, base, comparison, turn)
+            frames = ([] if state.get('archive_review') or state.get('pipeline_review')
+                      else normal_frames(self, state, base, comparison, turn))
             pipeline_review = state.get('pipeline_review') == (state.get('candidate') or {}).get('id') and bool(state.get('pipeline_review'))
             if pipeline_review:
                 frames = self.pipeline_frames(state['candidate'], turn, state.get('pipeline_times_ms'))
@@ -418,9 +453,12 @@ class AdaptiveProduction:
             if not archived_review and not pipeline_review and len(frames) < 24:
                 frames += reference_frames(self, state)
             archive_changes = None
+            archive_pipeline_review = bool(
+                archived_review and archived_review.get('pipeline')
+                and not state.get('archive_requested_times'))
             if archived_review:
-                if archived_review.get('pipeline'):
-                    frames = self.pipeline_frames(archived_review, turn)
+                if archive_pipeline_review:
+                    frames = self.pipeline_frames(archived_review, turn, state.get('pipeline_times_ms'))
                 else:
                     _, archive_clock = self.media._info(self.source)
                     frames, archive_changes = retained_archive_evidence(
@@ -440,7 +478,11 @@ class AdaptiveProduction:
                      and (self.node.get('external_pending') or state.get('pending_turn') == turn)]
             if len(saved) > 1:
                 raise Conflict('同一制作轮存在多个决策，请核对后恢复')
+            from .context_history import retain_context_history
+            history_ref = (retain_context_history(self, state)
+                           if not saved and self.task.get('agent_engine') == 'codex' else None)
             action = CleanAction.model_validate(saved[0]['result']).model_dump() if saved else self.decision({
+                'retained_history': history_ref,
                 'inventory': self.inventory, 'source_design': design,
                 'clean_plate_review_requirements': {
                     'review_sha256': state['base']['sha256'],
@@ -461,7 +503,12 @@ class AdaptiveProduction:
                     'image_executor': 'project_codex_worker',
                     'cost_ledger_pause_cancel_and_no_unknown_replay': True},
                 'review_draft_policy': self.task.get('review_draft_authorization'),
+                'output_goal': self.task.get('output_goal', 'quality_approved'),
                 'route_work_order': state.get('route_work_order'),
+                'new_execution': state.get('new_execution'),
+                'work_conclusions': list(state.get('work_conclusions', {}).values()),
+                'continuous_work_orders': temporal_work_orders(self, state),
+                'historical_retirement': retired_candidates(self.store, state),
                 'clean_generated_references': available_references(self, state['base']['sha256']),
                 'method_experience_advisories': method_advisories(self.store),
                 'accepted': [{k: v for k, v in item.items() if k not in {'evidence', 'path'}}
@@ -493,7 +540,8 @@ class AdaptiveProduction:
                     if candidate.get('input_sha256') == state['base']['sha256']
                     and candidate.get('review_status') not in {'rejected', 'needs_human_review'}
                     and candidate.get('id') != (state.get('candidate') or {}).get('id')],
-                'review_mode': 'scope_review' if scope_review else 'archive_diagnosis' if archived_review else 'pipeline_diagnosis' if pipeline_review else 'candidate_review',
+                'pipeline_inspection': state.get('pipeline_inspection'),
+                'review_mode': 'scope_review' if scope_review else 'pipeline_diagnosis' if pipeline_review or archive_pipeline_review else 'archive_diagnosis' if archived_review else 'candidate_review',
                 'excluded_wan_instances': self.wan_exclusions(state),
                 'wan_exclusions_scope': '仅限制新的生成，不代替当前候选质量判断。受控quality_reassessment'
                                         '允许对已保存结果重新审阅；旧拒绝保留，不因此自动接受或授权重投。',
@@ -504,9 +552,9 @@ class AdaptiveProduction:
                     for c in state.get('candidate_archive', []) if c.get('review_status') == 'rejected'][-8:],
                 'frame_clock': [{k: f[k] for k in ('label', 'time_ms', 'sampled_time_ms',
                                 'frame_index', 'next_frame_time_ms', 'exclusive_end_ms')}
-                                for f in frames if f.get('kind') != 'generated_reference'],
-                'observed_times_ms': sorted({f['time_ms'] for f in frames}) if pipeline_review or (archived_review and archived_review.get('pipeline')) else state['times_ms'],
-                'time_basis': 'crop_relative' if pipeline_review or (archived_review and archived_review.get('pipeline')) else 'source_absolute',
+                                for f in frames if f.get('kind') not in {'generated_reference', 'still_pipeline'}],
+                'observed_times_ms': sorted({f['time_ms'] for f in frames if f.get('time_ms') is not None}),
+                'time_basis': 'still_image' if frames and all(f.get('kind') == 'still_pipeline' for f in frames) else 'crop_relative' if pipeline_review or archive_pipeline_review else 'source_absolute',
                 'baseline_sha256': state['base']['sha256'],
                 'observation_delivery': {
                     'window_id': state.get('visible_observation_key'),
@@ -518,6 +566,11 @@ class AdaptiveProduction:
                 'history': recent_history(state['history']), 'remaining_steps': None if limit is None else limit - turn,
                 'instructions': (
                     '你是work agent，负责真实视频观察、局部方法选择、提出处理参数和候选审阅；执行器实际运行工具。'
+                    '完整候选优先时，错误与拒绝会交给Route统筹，不必等待所有实例失败。'
+                    '按实际观看影响保留普通瑕疵；不为追求满分反复inspect。'
+                    '逐帧是媒体计算，不是每帧一轮Agent；优先对已观察且方法适用的连续范围一次处理和审阅。'
+                    '不要为压低轮数跨剪辑或遮挡强行合并，也不要无证据逐帧拆解稳定连续文字。'
+                    'context_projection为有界历史视图，省略不代表不存在；需要旧细节时按retained_history的路径与SHA只读查ID，再inspect_archive观察实际媒体。'
                     '若有route_work_order，先回答该实例的具体证据问题再决定修复或说明真实缺口，不把路由建议当成已完成观察。'
                     'execution_contract说明当前已实现能力；冻结知识说明选型和质量要求。显式protected_foreground已实现，自动分割未实现，二者不能混淆。'
                     '当前budget为费用依据；历史obstacle里的旧余额或旧能力说明不是当前事实。'
@@ -538,7 +591,7 @@ class AdaptiveProduction:
                     'defer使用start_ms/end_ms只登记已证实困难范围；其他actionable_intervals_ms继续，不以省略时段将未检查余段全部暂缓。'
                     '仅全段有明确不适用证据时省略defer起止；不能反复检查相同暂缓范围，也不能把暂缓记成覆盖或缩短源实例隐藏残字。'
                     'rebase_candidate仅本地重贴，不修复模型原始损伤；重合成仍需正常三方边界验收。'
-                    '已有reusable_candidates时先复用并观察打分，再决定是否需要新生成；切换实例不代表放弃已有候选。'
+                    '可复用且有用的候选先观察；旧候选缺链路或质量失败时可放弃，依据原片另选方法，不强制恢复旧产物。'
                     '候选损坏且归因不明时inspect_pipeline读取已有模型输入/原始返回/缩放结果，不产生外部调用。'
                     '链路诊断图是裁切相对时间，不是原片帧；该轮不能accept，需要inspect回到正常三方审阅。'
                     '确认候选不合格后reject_candidate保存失败证据并清除当前候选，优先推进其他未解决实例。'
@@ -557,7 +610,17 @@ class AdaptiveProduction:
                     '缩短时须在absent_times_ms列出被排除的无该文字帧，并提供新边界内侧文字帧；不能用缩短隐藏残字。'
                     'finish前逐实例确认覆盖；无法处理的真实硬伤明确blocked，不伪造成功。')},
                 CleanAction, frames, key=f'clean-{turn}')
-            state['history'].append({'turn': turn, 'decision': action})
+            from video_translation.application.task_supervision import live_directions
+            # A saved decision resumes its original external request before new directions.
+            if not saved and self._sent_directions != digest(
+                    live_directions(self.service, self.task["id"], self.node["id"])):
+                state.setdefault('held_decisions', []).append({
+                    'turn': turn, 'decision': action, 'reason': 'New Route direction arrived during this decision'})
+                state['turn'] += 1
+                self.store.put('production_session', state)
+                continue
+            state['history'].append({'turn': turn, 'decision': action,
+                                     'input_base_sha256': state['base']['sha256']})
             from .convergence import record_observation
             record_observation(self, state, action, frames)
             if scope_review and action['action'] in {'confirm_scope', 'defer', 'blocked'}:
@@ -567,18 +630,23 @@ class AdaptiveProduction:
             state.pop('pipeline_review', None)
             state.pop('pipeline_times_ms', None)
             state.pop('archive_review', None)
+            state.pop('archive_requested_times', None)
             from .viewing_review import guard_candidate_verdict, guard_review_only
             guard_review_only(self, state, action)
             if action['action'] == 'request_reference':
                 from .imagegen_bridge import enqueue
                 return enqueue(self, state, action, frames)
             work_order = state.get('route_work_order') or {}
-            if (work_order.get('local_only') and action['action'] == 'repair'
-                    and action.get('method') in {'wan', 'image_edit'}):
-                state['history'][-1]['tool_error'] = '当前路由仅分派本地证据/方法检查，不授权新增收费生成'
+            from .clean_authority import repair_obstacle
+            authority_error = repair_obstacle(work_order, action)
+            if authority_error:
+                state['history'][-1]['tool_error'] = authority_error
                 state['turn'] += 1
                 self.store.put('production_session', state)
-                raise CapabilityUnavailable('本地路由请求了未授权的收费生成，未提交外部请求；需选择可行本地方法或明确缺口')
+                from .review_draft import complete_candidate
+                if complete_candidate(self.task):
+                    continue
+                raise CapabilityUnavailable(authority_error)
             policy_ref = {k: policy_resource[k] for k in ('id', 'version', 'sha256')}
             if guard_candidate_verdict(self, state, action, frames, quality_policy, policy_ref):
                 continue
@@ -653,6 +721,9 @@ class AdaptiveProduction:
                     state['turn'] += 1
                     state['history'][-1]['tool_error'] = '相同底片和范围已检查；需要新证据或具体修复方法'
                     self.store.put('production_session', state)
+                    from .review_draft import complete_candidate
+                    if complete_candidate(self.task):
+                        continue
                     raise CapabilityUnavailable('已停止重复观察：底片、范围和时间点均未变化；保留原观察记录')
                 state.setdefault('inspection_requests', {})[key] = turn
                 state.setdefault('inspection_window_requests', {})[semantic_key] = turn
@@ -665,8 +736,14 @@ class AdaptiveProduction:
                         raise ValueError('历史候选不存在')
                     self.verified(archived)
                     if action['action'] == 'inspect_archive':
+                        times = action['times_ms']
+                        if any(t < 0 or t >= self.duration for t in times):
+                            raise ValueError('历史观察时间超出原片；未替换为默认采样')
+                        if len(times) > 6:
+                            raise ValueError('历史候选对照每次最多6个时间点；请按图片上限缩小检查范围')
                         state['archive_review'] = archived['id']
-                        state['times_ms'] = self.candidate_times(archived)
+                        state['archive_requested_times'] = times
+                        state['times_ms'] = times or self.candidate_times(archived)
                     else:
                         state['candidate'] = self.rebase_candidate(archived, state, turn)
                         state.setdefault('candidate_archive', []).append(dict(state['candidate']))
@@ -674,20 +751,11 @@ class AdaptiveProduction:
                 except (ValueError, Conflict) as exc:
                     state['history'][-1]['tool_error'] = str(exc)
             elif action['action'] == 'inspect_pipeline':
-                candidate = state.get('candidate')
-                matches = candidate and (
-                    candidate['id'] == action['candidate_id'] if action.get('candidate_id')
-                    else candidate['source_id'] == action.get('source_id'))
-                if not matches or not candidate.get('pipeline'):
-                    state['history'][-1]['tool_error'] = '当前候选没有可核验的链路文件'
-                else:
-                    try:
-                        times = self.pipeline_sample_times(candidate, action['times_ms'])
-                        action['candidate_id'] = candidate['id']
-                        state['pipeline_review'] = candidate['id']
-                        state['pipeline_times_ms'] = times
-                    except (ValueError, Conflict) as exc:
-                        state['history'][-1]['tool_error'] = str(exc)
+                from .image_pipeline import request
+                try:
+                    request(self, state, action)
+                except (ValueError, Conflict) as exc:
+                    state['history'][-1]['tool_error'] = str(exc)
             elif action['action'] == 'reject_candidate':
                 self.reject_candidate(state, action, reviewed_archive=archived_review)
             elif action['action'] == 'restore_candidate':
@@ -713,7 +781,18 @@ class AdaptiveProduction:
                 # Save the decision before dispatch; retries resume this action only.
                 entry = state['history'].pop()
                 from .convergence import reserve_action
-                reserve_action(self, state, action, resuming=saved)
+                try:
+                    reserve_action(self, state, action, resuming=saved)
+                except CapabilityUnavailable as exc:
+                    from .review_draft import complete_candidate
+                    if not complete_candidate(self.task):
+                        raise
+                    state['history'].append(entry)
+                    entry['tool_error'] = str(exc)
+                    state.pop('pending_turn', None)
+                    state['turn'] += 1
+                    self.store.put('production_session', state)
+                    continue
                 self.store.put('production_session', state)
                 state['history'].append(entry)
                 try:
@@ -777,6 +856,10 @@ class AdaptiveProduction:
                 }
                 state['finished'] = True
                 state['evidence'] = action['evidence']
+            from .work_conclusions import retain
+            retain(state, action, turn=turn,
+                   base_sha256=state['history'][-1]['input_base_sha256'],
+                   frames=frames, tool_error=state['history'][-1].get('tool_error'))
             state['turn'] += 1
             self.store.put('production_session', state)
             if action['action'] == 'accept':
@@ -1038,6 +1121,11 @@ class AdaptiveProduction:
         artifact = self.service.artifact(self.task['id'],self.node,target,self.candidate_kind(target),
                                          f'局部清底候选 {turn+1}')
         return {'id':artifact['id'],'path':str(target),'sha256':artifact['sha256'],'source_id':item['id'],
+                **({'pipeline': {'media_type': 'still_image',
+                    **{key: {'path': str(path), 'sha256': self.service.hash_file(path)}
+                       for key, path in (('input', crop), ('generated', generated),
+                                         ('conformed', self.directory / f'plate-{turn}.png'))}}}
+                   if method == 'image_edit' else {}),
                 **({'reference_id': action['reference_id'], 'image_provider': 'codex_builtin_imagegen'}
                    if method == 'reference_plate' else {}),
                 **({'pipeline': {

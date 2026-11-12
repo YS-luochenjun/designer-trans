@@ -194,6 +194,8 @@ class ImageProduction:
         identity_fields = {"task": task["id"], "source_sha256": hashlib.sha256(data).hexdigest(),
                            "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                            "snapshot": snapshot, "transparent": transparent}
+        if node.get("stage_reset_id"):
+            identity_fields["stage_reset_id"] = node["stage_reset_id"]
         identity = "image-" + _digest(identity_fields)
         lock_path = directory / f"{identity}.lock"
         if lock_path.is_symlink():

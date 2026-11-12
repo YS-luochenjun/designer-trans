@@ -14,6 +14,8 @@ export interface DeletionPreview {
   includes_final_outputs: boolean;
   shared_assets: { id: string; references: unknown[] }[];
   retained_external_receipts?: number;
+  discard_unresolved?: boolean;
+  unresolved_record_count?: number;
   preserved_files: { id: string; reason: string }[];
 }
 export type PendingDeletion = { task: Pick<Task, "id" | "title">; preview: DeletionPreview; error?: string };
@@ -112,7 +114,7 @@ function DeletionDialog({ task, preview, error = "", loading = false, reload, re
         {preview.shared_assets.length > 0 && <p>保留 {preview.shared_assets.length} 项被其他任务或计划引用的共享素材。</p>}
         {preview.preserved_files.length > 0 && <details className="help-disclosure"><summary>保留文件（{preview.preserved_files.length}）</summary><ul>{preview.preserved_files.map((file, index) => <li key={`${file.id}-${index}`}>{file.id}：{({ external_or_unowned_input: "外部或非独占原片", external_or_unowned_output: "外部或非独占产物" } as Record<string, string>)[file.reason] ?? file.reason}</li>)}</ul></details>}
         {!preview.can_delete && <div role="alert" className="deletion-blockers"><strong>当前不能删除</strong><ul>{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul></div>}
-        {preview.retained_external_receipts ? <p>保留 {preview.retained_external_receipts} 项已结束调用的费用与失败回执。</p> : null}
+        {preview.discard_unresolved && !!preview.unresolved_record_count && <p>同时放弃并删除 {preview.unresolved_record_count} 项未收口记录及原结果。删除不会撤销已发生的外部费用或远端操作。</p>}
         {retry && <p role="status">上次删除尚未全部确认。重试沿用原来的删除范围；任务记录已删除时，只继续剩余文件清理。</p>}
         {preview.can_delete && !retry && <label className="source-confirm"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} />我确认删除任务及以上文件（含成品）</label>}
       </>}

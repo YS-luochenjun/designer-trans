@@ -1,0 +1,7 @@
+id: video-translation.route-work
+version: "1.3.0"
+name: Route 与 Work 的方向交接
+status: active
+nodes: []
+content: SKILL.md
+description: 用户消息、制作阻塞或审核不通过时，由 Route 管理需求与有界返工，Work 自主制作并报备实际产物。

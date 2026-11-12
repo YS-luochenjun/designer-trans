@@ -59,4 +59,4 @@ def apply_tracked_donor(visual, source, target, *, start_ms, end_ms, envelope,
                 raise ValueError(f"Donor border does not match at {timestamp:.3f}ms; inspect motion or lighting")
         frame.paste(patch, (left, top), local_mask)
 
-    return visual._render(source, target, info, transform)
+    return visual._render_window(source, target, info, transform, start_ms, end_ms)

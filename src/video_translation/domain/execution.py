@@ -26,11 +26,21 @@ class ExecutionContract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class ResourceBudget(ExecutionContract):
+    max_workspace_bytes: int = Field(default=2 * 1024**3, gt=0, le=256 * 1024**3)
+    max_workspace_files: int = Field(default=10_000, gt=0, le=200_000)
+    min_free_bytes: int = Field(default=1024**3, ge=0)
+    max_external_calls: int = Field(default=80, ge=0, le=10_000)
+    max_recovery_calls: int = Field(default=8, ge=0, le=1000)
+    max_clean_turns: int = Field(default=48, ge=0, le=10_000)
+
+
 class ExecutionProfile(ExecutionContract):
     revision: Literal[1] = 1
     mode: ExecutionMode = "efficient_v1"
     reserve_bytes: int = Field(default=128 * 1024**2, ge=0)
     max_unchanged_actions: int = Field(default=12, ge=2, le=100)
+    resource_budget: ResourceBudget | None = None
 
 class FileRef(ExecutionContract):
     path: str

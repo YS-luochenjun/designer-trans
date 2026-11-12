@@ -314,9 +314,22 @@ class VisualMedia:
     @contextmanager
     def _decoded(self, source, info):
         """Keep one decoded frame in memory; never materialize a video on disk."""
+        with self._decoded_window(source, info, 0, info["frames"]) as frames:
+            yield frames
+
+    @contextmanager
+    def _decoded_window(self, source, info, first, stop):
+        """Select exact native indices before RGB pipe transfer; no approximate seek."""
+        if (type(first) is not int or type(stop) is not int
+                or not 0 <= first < stop <= info["frames"]):
+            raise ValueError("Decode frame window is outside source")
+        expected = stop - first
+        selection = (["-vf", f"trim=start_frame={first}:end_frame={stop},setpts=PTS-STARTPTS"]
+                     if first or stop != info["frames"] else [])
         with TemporaryFile() as errors:
             process = subprocess.Popen([str(a) for a in self._base() + ["-i", source, "-map", "0:v:0",
                                         "-an", "-sn", "-dn", "-pix_fmt", "rgb24", "-fps_mode", "passthrough",
+                                        *selection,
                                         "-t", str(info["duration_ms"] / 1000), "-threads", "1",
                                         "-f", "rawvideo", "pipe:1"]],
                                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=errors)
@@ -329,22 +342,26 @@ class VisualMedia:
                     if not raw:
                         break
                     count += 1
-                    if len(raw) != size or count > info["frames"]:
+                    if len(raw) != size or count > expected:
                         raise MediaError("Invalid decoded frame count or incomplete frame")
                     yield Image.frombytes("RGB", (info["width"], info["height"]), raw)
                 returncode = process.wait()
-                if returncode != 0 or count != info["frames"]:
+                if returncode != 0 or count != expected:
                     errors.seek(0, os.SEEK_END)
                     errors.seek(max(0, errors.tell() - 4096))
                     diagnostic = errors.read().decode("utf-8", errors="replace")
                     diagnostic = diagnostic.replace(str(source), "<source>")
-                    raise MediaDecodeError(returncode, count, info["frames"], diagnostic)
+                    raise MediaDecodeError(returncode, count, expected, diagnostic)
 
             try:
                 with self._guard([process], [], [errors]):
                     yield frames()
             finally:
                 process.stdout.close()
+
+    def _render_window(self, source, target, info, transform, start_ms, end_ms):
+        # Full video outputs still encode every frame; sparse outputs override this seam.
+        return self._render(source, target, info, transform)
 
     def _render(self, source, target, info, transform):
         source, target = Path(source), Path(target)
@@ -390,7 +407,9 @@ class VisualMedia:
                                    "-map", "0:v:0", "-map", "1:a?", "-map_metadata", "-1",
                                    "-c:v", "libx264rgb", "-crf", "0", "-preset", "ultrafast", "-threads", "1",
                                    "-pix_fmt", "rgb24", "-c:a", "copy", "-fps_mode", "passthrough"]
-            args += self._limits(info["duration_ms"] / 1000) + [output]
+            # Raw video EOF bounds frames. A video-duration cutoff drops copied
+            # audio tail packets when the original audio outlasts its picture.
+            args += ["-fs", str(min(self.MAX_OUTPUT_BYTES, self.media.max_source_bytes)), output]
             process = subprocess.Popen([str(a) for a in args], stdin=subprocess.PIPE,
                                        stdout=subprocess.DEVNULL, stderr=errors)
             try:
@@ -489,7 +508,7 @@ class VisualMedia:
                     self._simple_background(image.crop(rect), color)
                 image.paste(replacement, rect[:2])
 
-        return self._render(source, target, info, transform)
+        return self._render_window(source, target, info, transform, start_ms, end_ms)
 
     def patch_video(self, source, patch, target, *, start_ms, end_ms, region, blend_core=None) -> Path:
         source, info = self._info(source)
@@ -539,7 +558,7 @@ class VisualMedia:
                     consumed += 1
                     if consumed == required and next(frames, None) is not None:
                         raise MediaError("Patch has unexpected extra frames")
-            result = self._render(source, target, info, transform)
+            result = self._render_window(source, target, info, transform, start_ms, end_ms)
         return result
 
     def _text_image(self, layer, size):

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -32,11 +32,15 @@ export function useData<T>(path: string, interval = 0) {
     [loading, setLoading] = useState(true),
     [revision, setRevision] = useState(0);
   const reload = useCallback(() => setRevision((value) => value + 1), []);
+  const previousPath = useRef(path);
   useEffect(() => {
     let alive = true,
       busy = false;
-    setLoading(true);
-    setData(null);
+    if (previousPath.current !== path) {
+      previousPath.current = path;
+      setLoading(true);
+      setData(null);
+    }
     const load = async () => {
       if (busy) return;
       busy = true;

@@ -4,11 +4,12 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from video_translation.integrations.agents import CapabilityUnavailable
+from video_translation.persistence.store import now
 from .stage_quality import require_node_output
 
 
 def reconcile_stage_outputs(service, task):
-    if (task.get("visual_route") != "agent_adaptive" or task.get("control_paused")
+    if (task.get("visual_route") != "agent_adaptive"
             or task["status"] in {"cancelled", "completed"}
             or any(n["status"] in {"running", "waiting_external"} for n in task["nodes"])):
         return
@@ -40,31 +41,43 @@ def reconcile_stage_outputs(service, task):
             path = Path(base.get("path", ""))
             root = service.settings.runtime / "tasks" / task["id"]
             reopen = bool(
-                state and not state.get("candidate") and state.get("pending_turn") is None
+                not task.get("control_paused")
+                and state and not state.get("candidate") and state.get("pending_turn") is None
                 and not current_decision and base.get("sha256") == node["output"].get("sha256")
                 and path.resolve().is_relative_to(root.resolve()) and path.is_file()
                 and service.hash_file(path) == base["sha256"]
                 and handoff_needs_capability_review(controller, state))
         elif node["definition_id"] == "typography" and node["output"].get("render_error"):
-            reopen = all(next(n for n in task["nodes"] if n["id"] == dep)["status"]
+            reopen = not task.get("control_paused") and all(
+                         next(n for n in task["nodes"] if n["id"] == dep)["status"]
                          in {"succeeded", "skipped"} for dep in node["depends_on"])
         if reconsider_failed_clean and not reopen:
             continue
         _retain(node)
         node.update(status="pending" if reopen else "failed", stage_readiness="needs_repair",
                     error=reason, finished_at=None)
-        # Only descendants lose readiness. Audio, translation and source analysis
-        # remain reusable; unknown calls keep their original status and identity.
-        descendants = {node["id"]}
-        for child in task["nodes"]:
-            if child["id"] == node["id"] or not descendants.intersection(child["depends_on"]):
-                continue
-            descendants.add(child["id"])
-            child["stale_upstream"] = node["id"]
-            if child["status"] in {"succeeded", "skipped", "failed", "interrupted"}:
-                _retain(child)
-                child.update(status="pending", stage_readiness="awaiting_upstream",
-                             error=None, finished_at=None)
+        invalidate_descendants(service, task, node)
+
+
+def invalidate_descendants(service, task, node):
+    """Keep old media and unknown calls; only withdraw dependent readiness."""
+    descendants = {node["id"]}
+    for child in task["nodes"]:
+        if child["id"] == node["id"] or not descendants.intersection(child["depends_on"]):
+            continue
+        descendants.add(child["id"])
+        child["stale_upstream"] = node["id"]
+        if child["status"] in {"succeeded", "skipped", "failed", "interrupted", "waiting_user"}:
+            _retain(child)
+            child.update(status="pending", stage_readiness="awaiting_upstream",
+                         error=None, finished_at=None)
+            for question in service.store.list("question"):
+                if (question["task_id"] == task["id"] and question["node_id"] == child["id"]
+                        and question["status"] == "open"):
+                    service.store.update("question", question["id"], lambda q: q.update(
+                        status="superseded", superseded_by="invalid_upstream_stage",
+                        superseded_at=now()))
+    return descendants
 
 
 def _retain(node):

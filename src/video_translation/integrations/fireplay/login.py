@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import os
 from pathlib import Path
 import threading
 import time
 from urllib.parse import urlsplit
 
 from .mcp import FireplayMCP
+from .credentials import CredentialSession
 
 
 class FireplayLogin:
@@ -35,7 +35,7 @@ class FireplayLogin:
             threading.Thread(target=self._run, daemon=True, name="fireplay-login").start()
             return dict(self.state)
 
-    def _accept(self, token):
+    def _accept(self, token, refresh_token=None):
         config = self.bridge.mcp.config
         candidate = replace(config, _credential_file=None, _environment={config.token_env: token})
         with FireplayMCP(candidate) as client:
@@ -44,17 +44,7 @@ class FireplayLogin:
                 raise ValueError("登录身份未通过 Fireplay 连接核验")
             client.requirement_delivery_options()
         path = self.root / "runtime/config/fireplay-login-token.txt"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_suffix(".tmp")
-        try:
-            with temporary.open("w", encoding="utf-8") as stream:
-                os.chmod(temporary, 0o600)
-                stream.write(token)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
+        CredentialSession(path).install(token, refresh_token)
         with self.bridge.lock:
             self.bridge.mcp.config = replace(config, _credential_file=path)
             self.bridge._refresh_identity()
@@ -80,10 +70,13 @@ class FireplayLogin:
                     deadline = time.monotonic() + 600
                     seen = set()
                     while time.monotonic() < deadline and not page.is_closed():
-                        if urlsplit(page.url).netloc == "authhub.cms1.cc":
+                        location = urlsplit(page.url)
+                        if location.scheme == "https" and location.netloc == "authhub.cms1.cc":
                             phase = "token"
                             try:
-                                token = page.evaluate("localStorage.getItem('auth_token')")
+                                pair = page.evaluate("({access: localStorage.getItem('auth_token'), "
+                                                     "refresh: localStorage.getItem('refresh_token')})")
+                                token, refresh_token = pair.get("access"), pair.get("refresh")
                             except Exception as exc:
                                 # OAuth redirects may replace the JS context between URL check and evaluation.
                                 if "Execution context was destroyed" in str(exc):
@@ -97,8 +90,9 @@ class FireplayLogin:
                                 if expiry is not None and expiry > time.time():
                                     self._set("checking", "正在核验 Fireplay 连接")
                                     phase = "verification"
-                                    self._accept(token)
-                                    self._set("succeeded", "登录成功，工作台凭据已更新")
+                                    self._accept(token, refresh_token)
+                                    self._set("succeeded", "登录成功，已启用自动续期" if refresh_token else
+                                              "登录成功；登录服务未提供续期凭据，到期仍需重新登录")
                                     return
                         page.wait_for_timeout(1000)
                     self._set("cancelled", "登录窗口已关闭或等待超时，可重新登录")

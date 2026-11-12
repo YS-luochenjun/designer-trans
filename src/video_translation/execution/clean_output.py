@@ -4,12 +4,15 @@ from pathlib import Path
 from video_translation.integrations.agents.errors import CapabilityUnavailable
 
 
-def playable_base(controller, state):
+def playable_base(controller, state, *, target=None):
     base = state["base"]
     if not getattr(getattr(controller, "media", None), "is_manifest", lambda p: False)(base.get("path", "")):
         return dict(base)
     controller.verified(base)
-    target = controller.media.workspace.root / "checkpoints" / (base["sha256"] + ".mp4")
+    if target is None:
+        from ..application.materialization_recovery import completed_representation
+        target = completed_representation(controller, state)
+    target = target or controller.media.workspace.root / "checkpoints" / (base["sha256"] + ".mp4")
     path, receipt = controller.media.materialize(base["path"], target)
     return {"path": str(path), "sha256": receipt["output_sha256"],
             "source_representation_sha256": base["sha256"],

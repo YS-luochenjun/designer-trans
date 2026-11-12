@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "FileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {"title": "Path", "type": "string"},
+        "sha256": {"pattern": "^[0-9a-f]{64}$", "title": "Sha256", "type": "string"}
+      },
+      "required": ["path", "sha256"],
+      "title": "FileRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source_node_id": {"maxLength": 128, "minLength": 1, "title": "Source Node Id", "type": "string"},
+    "target_node_id": {"maxLength": 128, "minLength": 1, "title": "Target Node Id", "type": "string"},
+    "expected_basis_sha256": {"pattern": "^[a-f0-9]{64}$", "title": "Expected Basis Sha256", "type": "string"},
+    "note": {"maxLength": 2000, "minLength": 1, "title": "Note", "type": "string"},
+    "evidence": {"items": {"$ref": "#/$defs/FileRef"}, "maxItems": 12, "title": "Evidence", "type": "array"}
+  },
+  "required": ["source_node_id", "target_node_id", "expected_basis_sha256", "note"],
+  "title": "HandoffRequest",
+  "type": "object",
+  "$id": "urn:video-translation:workflow/work-handoff:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

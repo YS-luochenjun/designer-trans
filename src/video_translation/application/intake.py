@@ -84,7 +84,7 @@ class IntakeService:
     def _identity(self):
         if not self.fireplay.mcp or not self.fireplay.configured:
             raise ValueError("请先连接 Fireplay 并登录后再读取需求")
-        return digest({"credential": self.fireplay.mcp.config.fingerprint(),
+        return digest({"credential": self.fireplay.mcp.config.scope_fingerprint(),
                        "scope": self.fireplay.settings.fireplay_scope})
 
     def _resolve(self, reference):

@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import shutil
 from contextlib import asynccontextmanager
+from ipaddress import ip_address, ip_network
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
-from video_translation.application.collaboration import MessageCreate
+from video_translation.application.collaboration import CleanContinuation, MessageCreate
 
 from video_translation.agent_runtime.resources import ResourceCatalog
 from video_translation.application.deletion import TaskDeletionService
@@ -51,6 +52,7 @@ def create_app(settings: Settings | None = None, executor_factory=None):
                 worker.stop()
                 raise
         try:
+            fireplay.start()
             yield
         finally:
             if settings.worker_enabled:
@@ -73,31 +75,55 @@ def create_app(settings: Settings | None = None, executor_factory=None):
     app.include_router(route_recovery_routes(service, worker, manager))
     from video_translation.interfaces.visual_recovery_api import visual_recovery_routes
     app.include_router(visual_recovery_routes(service, worker, manager))
+    from video_translation.interfaces.source_observation_api import source_observation_routes
+    app.include_router(source_observation_routes(service, worker))
     from video_translation.interfaces.execution_api import execution_routes
     app.include_router(execution_routes(service))
     from video_translation.interfaces.advanced_execution_api import advanced_routes
     app.include_router(advanced_routes(service, worker, manager))
+    from video_translation.interfaces.storage_api import storage_routes
+    app.include_router(storage_routes(service, worker))
     from video_translation.integrations.fireplay.mcp import FireplayMCPError
 
     @app.exception_handler(FireplayMCPError)
     async def fireplay_error(request, exc):
         return JSONResponse({"detail": str(exc), "code": exc.code}, status_code=503)
 
+    allowed_hosts = {"127.0.0.1", "localhost", "::1", "testserver", *settings.lan_hosts}
+    allowed_networks = tuple(ip_network(value) for value in settings.lan_networks)
+    if settings.lan_hosts and not allowed_networks:
+        raise ValueError("LAN access requires explicit allowed_networks")
+
     @app.middleware("http")
     async def local_boundary(request: Request, call_next):
-        # Loopback binding alone does not prevent cross-origin browser writes or DNS rebinding.
+        # Validate the peer independently of Host; forwarding headers cannot grant LAN access.
+        if allowed_networks:
+            try:
+                peer = ip_address(request.client.host) if request.client else None
+            except ValueError:
+                peer = None
+            if peer is None or not (peer.is_loopback or any(peer in network for network in allowed_networks)):
+                return JSONResponse({"detail": "仅支持本机和已配置的局域网访问"}, status_code=403,
+                                    media_type="application/json; charset=utf-8")
         host = request.url.hostname
-        if host not in {"127.0.0.1", "localhost", "::1", "testserver"}:
-            return JSONResponse({"detail": "仅支持本机访问"}, status_code=403)
+        if host not in allowed_hosts:
+            return JSONResponse({"detail": "访问地址不在工作台允许列表中"}, status_code=403,
+                                media_type="application/json; charset=utf-8")
         origin = request.headers.get("origin")
-        if origin and request.method not in {"GET", "HEAD", "OPTIONS"}:
-            parsed = urlsplit(origin)
-            if parsed.scheme not in {"http", "https"} or parsed.hostname not in {
-                "127.0.0.1",
-                "localhost",
-                "::1",
-            }:
-                return JSONResponse({"detail": "拒绝跨站写入请求"}, status_code=403)
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            if request.headers.get("sec-fetch-site") == "cross-site":
+                return JSONResponse({"detail": "拒绝跨站写入请求"}, status_code=403,
+                                    media_type="application/json; charset=utf-8")
+            if origin:
+                try:
+                    parsed = urlsplit(origin)
+                    same_origin = (parsed.scheme == request.url.scheme
+                                   and parsed.netloc.lower() == request.url.netloc.lower())
+                except ValueError:
+                    same_origin = False
+                if not same_origin:
+                    return JSONResponse({"detail": "拒绝跨站写入请求"}, status_code=403,
+                                        media_type="application/json; charset=utf-8")
         response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
@@ -110,6 +136,12 @@ def create_app(settings: Settings | None = None, executor_factory=None):
     @app.exception_handler(Conflict)
     async def conflict(request, exc):
         return JSONResponse({"detail": str(exc)}, status_code=409)
+
+    from video_translation.application.tasks import ArtifactRetired
+
+    @app.exception_handler(ArtifactRetired)
+    async def retired_artifact(request, exc):
+        return JSONResponse({"detail": str(exc), "retirement": exc.receipt}, status_code=410)
 
     @app.exception_handler(ValueError)
     async def bad_request(request, exc):
@@ -129,6 +161,27 @@ def create_app(settings: Settings | None = None, executor_factory=None):
             "manager_running": manager.running,
             "manager_error": manager.last_error,
             "manager_protocol_version": "3",
+            "maintenance_protocol_version": "1",
+            "work_handoff_protocol_version": "1",
+            "observation_clock_version": "2",
+            "observation_continuation_protocol_version": "1",
+            "task_route_protocol_version": "1",
+            "complete_candidate_protocol_version": "1",
+            "cleanup_stage_gate_protocol_version": "1",
+            "node_continuation_protocol_version": "1",
+            "clean_execution_authorization_protocol_version": "1",
+            "clean_stage_reset_protocol_version": "1",
+            "task_supervision_protocol_version": "1",
+            "work_report_recovery_protocol_version": "1",
+            "clean_stop_scope_protocol_version": "1",
+            "parallel_work_protocol_version": "1",
+            "max_concurrent_nodes": settings.max_concurrent_nodes,
+            "clean_work_protocol_version": "2",
+            "clean_route_recovery_protocol_version": "2",
+            "materialization_audio_protocol_version": "1",
+            "materialization_recovery_lifecycle_version": "3",
+            "task_deletion_policy_version": "2",
+            "fireplay_renewal_protocol_version": "1",
             "work_tool_profile": "native_codex_tools",
             "imagegen_executor": "project_codex_worker",
             "work_autonomy": os.environ.get("VT_CODEX_WORK_AUTONOMY", "bounded"),
@@ -219,6 +272,11 @@ def create_app(settings: Settings | None = None, executor_factory=None):
     def apply_message(task_id: str, message_id: str):
         with worker.dispatch_lock:
             return service.collaboration.apply(task_id, message_id)
+
+    @app.post("/api/tasks/{task_id}/messages/{message_id}/continue-clean")
+    def continue_clean_message(task_id: str, message_id: str, body: CleanContinuation):
+        with worker.guard(task_id):
+            return service.collaboration.continue_clean(task_id, message_id, body)
 
     @app.post("/api/tasks/{task_id}/control")
     def task_control(task_id: str, body: TaskControl):

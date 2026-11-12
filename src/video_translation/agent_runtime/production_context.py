@@ -1,18 +1,23 @@
 """Compact cross-stage context, not a claim of persistent model memory."""
 
 
-def production_context(task):
+def production_context(task, node=None):
     stages = []
     missing_motion = []
-    for node in task.get("nodes", []):
-        output = node.get("output", {})
+    selected = task.get("nodes", [])
+    if node and node.get("asset_id"):
+        selected = [item for item in selected if item["id"] in node.get("depends_on", [])
+                    or (item.get("asset_id") == node["asset_id"]
+                        and item.get("locale") in {None, node.get("locale")})]
+    for item in selected:
+        output = item.get("output", {})
         stages.append({
-            "stage": node["definition_id"], "locale": node.get("locale"),
-            "status": node["status"], "error": (node.get("error") or "")[:500],
+            "stage": item["definition_id"], "locale": item.get("locale"),
+            "status": item["status"], "error": (item.get("error") or "")[:500],
             "sha256": output.get("sha256"), "quality_passed": output.get("quality_passed"),
             "completion_state": output.get("completion_state"),
         })
-        if node["definition_id"] == "visual_analyze":
+        if item["definition_id"] == "visual_analyze":
             missing_motion.extend(d["source_id"] for d in output.get("lettering", [])
                                   if d.get("motion_status", "unknown") == "unknown")
     return {
@@ -21,6 +26,8 @@ def production_context(task):
                       "clean plate, complete translated speech/text, source style/motion, preserved music/effects, "
                       "and audiovisual review. Partial coverage or a successful tool call is not completion."),
         "roles": {
+            "manager": "Discuss project intent and propose permitted management actions.",
+            "workflow": "Program enforces dependencies and quality gates; it is not an extra model call per frame.",
             "route": "Diagnose workflow/context/capability gaps and assign a bounded evidence check.",
             "work": "Observe actual media, choose supported methods, propose processing and review candidates.",
             "executor": "Validate proposals, run tools, preserve receipts, enforce budgets and quality gates.",

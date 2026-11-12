@@ -33,6 +33,23 @@ def management_routes(manager, worker):
     def message(body: ManagerMessage):
         return manager.message(body)
 
+    @router.get("/maintenance/capabilities")
+    def maintenance_capabilities():
+        return {"intents": ["storage", "cleanup_plan", "knowledge_summary"],
+                "shortcuts": ["检查空间 <任务ID>", "清理计划 <任务ID>", "总结任务 <任务ID>"],
+                "cleanup_message_executes_deletion": False,
+                "summary_publishes_production_knowledge": False,
+                "model_calls_required": False}
+
+    @router.get("/tasks/{task_id}/storage")
+    def storage(task_id: str):
+        from ..application.project_maintenance import ProjectMaintenance
+        return ProjectMaintenance(manager.tasks).storage(task_id)
+
+    @router.get("/knowledge-candidates/{candidate_id}")
+    def knowledge_candidate(candidate_id: str):
+        return manager.store.require("knowledge_candidate", candidate_id)
+
     @router.post("/patrol", status_code=202)
     def patrol():
         return manager.enqueue("patrol", {}, identifier())

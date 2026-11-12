@@ -47,6 +47,11 @@ def pending_request(service, task):
 
 def execute_request(executor, task, record, *, agent=None):
     service = executor.service
+    if not record.get("_recover_saved_result"):
+        from .resource_budget import guard_external_call, guard_storage
+        current = service.store.require("task", task["id"])
+        guard_external_call(current)
+        guard_storage(service, current)
     root = (service.settings.runtime / "tasks" / task["id"]).resolve()
     directory = root / "imagegen-assets" / record["id"]
     directory.mkdir(parents=True, exist_ok=True)

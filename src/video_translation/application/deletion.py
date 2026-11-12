@@ -153,12 +153,14 @@ class TaskDeletionService:
         task = rows.get(("task", task_id))
         if task is None:
             raise KeyError(f"task: {task_id}")
+        discard_unresolved = task.get("status") == "cancelled"
         blockers = []
         if task.get("status") in {"queued", "running", "waiting_external"}:
             blockers.append("任务仍在排队或运行，请先取消并等待执行结束")
         if task.get("status") != "cancelled" and ready_nodes(task):
             blockers.append("任务仍有可执行节点，请先取消")
-        if any(n.get("status") in {"running", "waiting_external", "unknown"} for n in task.get("nodes", [])):
+        if not discard_unresolved and any(
+                n.get("status") in {"running", "waiting_external", "unknown"} for n in task.get("nodes", [])):
             blockers.append("存在活跃或结果不明的节点，需先停稳或对账")
         owned = {("task", task_id)}
         node_ids = {n["id"] for n in task.get("nodes", [])}
@@ -194,12 +196,11 @@ class TaskDeletionService:
                 if record.get("running"):
                     blockers.append("关联计划仍在触发，请等待结束")
                 updates[key] = {**record, "last_task_id": None}
-        external_receipts = []
+        unresolved = set()
         for kind, key in sorted(owned):
             record = rows[(kind, key)]
-            completed_response = self._completed_response(record, task) if kind == "operation" else None
-            if completed_response:
-                external_receipts.append(completed_response)
+            completed_response = self._completed_response(record, task) if (
+                kind == "operation" and not discard_unresolved) else None
             # New journal kinds are owned dynamically, so uncertain results must
             # also be checked independently of the legacy operation kind.
             uncertain = {"unknown", "running", "needs_reconciliation", "submitted",
@@ -211,22 +212,28 @@ class TaskDeletionService:
                 "adaptive_audio_segment", "adaptive_speech_revision",
             }
             if states & uncertain or (paid_journal and states & {"pending", "reserved"}):
-                blockers.append("存在未收口的执行或付费回执，需先核对并保留恢复证据")
+                unresolved.add((kind, key))
+                if not discard_unresolved:
+                    blockers.append("存在未收口的执行或付费回执，请先取消以放弃原结果后删除")
             if kind == "operation" and (
                 record.get("status") not in {"succeeded", "done", "failed", "cancelled"}
                 or (record.get("provider") == "kie" and record.get("status") not in {"succeeded", "done"}
                     and record.get("journal_state") not in {"success", "fail"} and not completed_response)
             ):
-                blockers.append("存在未对账的外部操作，需保留恢复证据")
+                unresolved.add((kind, key))
+                if not discard_unresolved:
+                    blockers.append("存在未对账的外部操作，请先取消以放弃原结果后删除")
             if kind in {"outbox", "requirement_submission"}:
                 states = [record.get("state", record.get("status"))]
                 states += [op.get("state", op.get("status")) for op in record.get("operations", [])]
                 if any(value in {"unknown", "running", "pending", "sending", "dispatched", "needs_reconciliation"}
                        for value in states):
-                    blockers.append("外部提交尚未确认，需保留回执和恢复证据")
+                    unresolved.add((kind, key))
+                    if not discard_unresolved:
+                        blockers.append("外部提交尚未确认，请先取消以放弃原结果后删除")
         shared = []
         preserved = []
-        roots = [self.runtime / "tasks" / task_id, self.runtime / "deliveries" / task_id]
+        roots = [self.runtime / category / task_id for category in ("tasks", "deliveries", "route")]
         for asset_id in sorted(set(task.get("asset_ids", []))):
             self._identifier(asset_id)
             asset_key = ("asset", asset_id)
@@ -271,12 +278,13 @@ class TaskDeletionService:
         identity = {"task_id": task_id, "records": [[*key, rows[key]] for key in sorted(owned)],
                     "updates": [[*key, rows[key], value] for key, value in sorted(updates.items())],
                     "shared_assets": shared, "entries": entries, "preserved_files": preserved,
-                    "external_receipts": external_receipts}
+                    "deletion_policy": 2, "discard_unresolved": discard_unresolved}
         receipt = rows.get(("deletion_receipt", task_id))
         if receipt and receipt.get("state") == "prepared":
             blockers.append("上次删除中断，请使用原预览指纹重试以恢复现场")
         return {"task_id": task_id, "fingerprint": _digest(identity), "can_delete": not blockers,
-                "retained_external_receipts": len(external_receipts), "_external_receipts": external_receipts,
+                "retained_external_receipts": 0, "discard_unresolved": discard_unresolved,
+                "unresolved_record_count": len(unresolved), "deletion_policy_version": 2,
                 "blockers": list(dict.fromkeys(blockers)), "files": files,
                 "file_count": len(files), "bytes": sum(item["size_bytes"] for item in files),
                 "shared_assets": shared, "preserved_files": preserved,
@@ -290,7 +298,8 @@ class TaskDeletionService:
         for index, relative in enumerate(receipt["roots"]):
             source = self._check_path(self.runtime / relative)
             parts = source.relative_to(self.runtime).parts
-            valid = (len(parts) == 2 and parts[0] in {"tasks", "deliveries"} and parts[1] == receipt["id"])
+            valid = (len(parts) == 2 and parts[0] in {"tasks", "deliveries", "route"}
+                     and parts[1] == receipt["id"])
             valid |= (len(parts) == 2 and parts[0] == "assets" and source.stem in receipt["asset_ids"])
             if not valid:
                 raise DeletionConflict("删除恢复清单含不属于该任务的路径")
@@ -353,7 +362,8 @@ class TaskDeletionService:
                            "roots": plan["_roots"], "asset_ids": [key for kind, key in plan["_owned"] if kind == "asset"],
                            "file_count": plan["file_count"], "bytes": plan["bytes"],
                            "records": plan["records"], "entries": plan["_entries"],
-                           "external_receipts": plan["_external_receipts"], "created_at": now()}
+                           "discard_unresolved": plan["discard_unresolved"],
+                           "unresolved_record_count": plan["unresolved_record_count"], "created_at": now()}
                 _save(db, "deletion_receipt", receipt)
             try:
                 with self.store.connection() as db:
@@ -401,7 +411,7 @@ class TaskDeletionService:
             return {**self._result(receipt, True),
                     "message": "任务记录已删除，本地文件清理未完成；使用原指纹重试"}
         receipt.update(state="completed", completed_at=now())
-        for key in ("entries", "roots", "asset_ids"):
+        for key in ("entries", "roots", "asset_ids", "external_receipts"):
             receipt.pop(key, None)
         self.store.put("deletion_receipt", receipt)
         return self._result(receipt, False)

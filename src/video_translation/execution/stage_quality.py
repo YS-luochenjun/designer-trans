@@ -11,6 +11,11 @@ def require_clean_plate(output, task=None):
         raise CapabilityUnavailable("无字底片尚未清理完成，禁止叠加译文；先处理残字并复核底片")
 
 
+def require_production_base(output, task=None):
+    """Output intent permits diagnostic exports, never unfinished lettering inputs."""
+    require_clean_plate(output, task)
+
+
 def require_visual_review(output, task=None):
     if output.get("render_error"):
         raise CapabilityUnavailable("译文字层渲染失败，不能作为可合成画面；先在字层节点修复")
@@ -37,7 +42,7 @@ def require_node_output(task, node, output):
     required = ({t["id"] for t in observed["output"].get("texts", [])
                  if t["treatment"] == "translate"} if observed else None)
     if stage == "clean":
-        require_clean_plate(output, task)
+        require_production_base(output, task)
         if required is not None and set(output["clean_review"].get("source_ids", [])) != required:
             raise CapabilityUnavailable("清底复核未逐项覆盖原片待译文字，不能标记完成")
     elif stage == "typography":

@@ -9,8 +9,9 @@ from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from .management import ManagerDecision, ManagerSettings
-from .execution import EXECUTION_CONTRACTS, ExecutionMode
+from .management import ManagerDecision, ManagerMessage, ManagerSettings
+from .work_handoffs import HandoffRequest
+from .execution import EXECUTION_CONTRACTS, ExecutionMode, ResourceBudget
 from .repair_evaluation import EvaluationRequest
 from .intake_policy import IntakePolicy
 from .rework import ReworkRequest
@@ -55,8 +56,10 @@ class TaskCreate(ExternalLimits):
     max_revisions: int = Field(default=1, ge=0, le=3)
     visual_route: Literal["agent_adaptive", "solid_overlay", "wan_video_edit"] = "agent_adaptive"
     audio_strategy: Literal["preserve_background", "replace_all_audio"] = "preserve_background"
+    output_goal: Literal["complete_candidate", "quality_approved"] = "complete_candidate"
     allow_review_draft: bool = False
     execution_profile: ExecutionMode = "efficient_v1"
+    resource_budget: ResourceBudget = Field(default_factory=ResourceBudget)
 
     @model_validator(mode="after")
     def draft_route(self):
@@ -243,4 +246,6 @@ CONTRACTS = {
     "workflow/schedule": ScheduleCreate,
     "agent/manager-decision": ManagerDecision,
     "workflow/manager-settings": ManagerSettings,
+    "workflow/manager-message": ManagerMessage,
+    "workflow/work-handoff": HandoffRequest,
 }

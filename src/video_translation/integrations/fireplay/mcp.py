@@ -17,6 +17,7 @@ from typing import Mapping
 import httpx
 import jsonschema
 from referencing.exceptions import Unresolvable
+from .credentials import CredentialError, CredentialSession, read_credentials
 
 SERVICES = {
     "campaigns": ("https://campaigns.fireplay.ai/api/mcp", "FIREPLAY_CAMPAIGNS_TOKEN"),
@@ -35,10 +36,11 @@ CONFIG_KEYS = {"enabled", "service", "url", "token_env", "timeout_seconds", "max
 class FireplayMCPError(RuntimeError):
     """Safe diagnostics: no remote bodies, credentials, or session IDs."""
 
-    def __init__(self, code: str, message: str, *, retryable: bool = False):
+    def __init__(self, code: str, message: str, *, retryable: bool = False, http_status=None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.http_status = http_status
 
     def as_dict(self) -> dict:
         return {"code": self.code, "message": str(self), "retryable": self.retryable}
@@ -130,15 +132,27 @@ class FireplayMCPConfig:
         environment = os.environ if self._environment is None else self._environment
         token = environment.get(self.token_env, "")
         if self._credential_file is not None and self._credential_file.is_file():
-            if self._credential_file.stat().st_size > 16384:
-                raise _error("invalid_credentials", "Fireplay 登录凭据文件无效")
-            token = self._credential_file.read_text("utf-8").strip()
+            try:
+                token = read_credentials(self._credential_file).get("access_token", "")
+            except CredentialError as exc:
+                raise _error(exc.code, str(exc)) from None
         if not isinstance(token, str) or len(token) > 16384 or any(c in token for c in "\r\n\x00"):
             raise _error("invalid_credentials", "Fireplay 凭据格式无效")
         return token.strip()
 
     def fingerprint(self) -> str:
         return hashlib.sha256((self.url + "\x00" + self._token()).encode()).hexdigest()
+
+    def scope_fingerprint(self) -> str:
+        """Keep local business snapshots stable only within a verified login lineage."""
+        if self._credential_file is not None:
+            try:
+                session = read_credentials(self._credential_file).get("session_id")
+            except CredentialError as exc:
+                raise _error(exc.code, str(exc)) from None
+            if session:
+                return hashlib.sha256((self.url + "\x00session:" + session).encode()).hexdigest()
+        return self.fingerprint()
 
     def credential_expiry(self) -> float | None:
         """Expiry is a local UX hint, never proof of identity or authorization."""
@@ -190,13 +204,43 @@ class FireplayMCP:
         self._tools = None
         self._protocol = PROTOCOL_VERSION
 
+    def renew_credentials(self, *, force=False, rejected_token=None):
+        with self._lock:
+            path = self.config._credential_file
+            if path is None or not self.config.enabled:
+                return False
+            try:
+                changed = CredentialSession(path, client=self._client).ensure_fresh(
+                    force=force, rejected_token=rejected_token)
+            except CredentialError as exc:
+                raise _error(exc.code, str(exc)) from None
+            if changed:
+                self._reset()
+                self._credential_identity = self.config.fingerprint()
+            return changed or rejected_token is not None and self.config._token() != rejected_token
+
     def status(self, probe: bool = False) -> dict:
+        renewal_error = None
+        if probe:
+            try:
+                self.renew_credentials()
+            except FireplayMCPError as exc:
+                renewal_error = exc.as_dict()
         credential = bool(self.config._token())
         result = {"mode": "mcp", "enabled": self.config.enabled, "server": self.config.service,
                   "transport": "streamable-http", "url": self.config.url, "token_env": self.config.token_env,
                   "credential_configured": credential, "credentials_available": credential,
                   "configured": self.config.enabled and credential, "probe": probe,
                   "connected": False, "business_authorized": None, "ready": False}
+        if self.config._credential_file is not None:
+            result.update(CredentialSession(self.config._credential_file).status())
+            if result["renewal_status"] in {"unknown", "login_required"} and not renewal_error:
+                renewal_error = {"code": "refresh_" + result["renewal_status"],
+                                 "message": "Fireplay 自动续期未确认或已失效，请在本项目重新登录。",
+                                 "retryable": False}
+        if renewal_error:
+            result.update(renewal_error)
+            return result
         if not self.config.enabled:
             result["code"] = "disabled"
             return result
@@ -304,7 +348,8 @@ class FireplayMCP:
             with self._client.stream("POST", self.config.url, json=body, headers=self._headers(),
                                      timeout=self.config.timeout_seconds, follow_redirects=False) as response:
                 if response.status_code in {401, 403}:
-                    raise _error("unauthorized", "Fireplay 身份无效或无查询权限")
+                    raise FireplayMCPError("unauthorized", "Fireplay 身份无效或无查询权限",
+                                           http_status=response.status_code)
                 if response.status_code == 404 and self._session_id:
                     raise _error("invalid_session", "MCP 会话已失效", retryable=True)
                 if response.status_code >= 300:
@@ -335,6 +380,7 @@ class FireplayMCP:
         return result
 
     def _initialize(self):
+        self.renew_credentials()
         identity = self.config.fingerprint()
         if identity != self._credential_identity:
             self._reset()
@@ -411,10 +457,17 @@ class FireplayMCP:
 
     def _read_with_reinitialize(self, operation):
         for attempt in range(2):
+            token = self.config._token()
             try:
                 return operation()
             except FireplayMCPError as exc:
-                if exc.code != "invalid_session" or attempt:
+                if attempt:
+                    raise
+                if (exc.code == "unauthorized" and exc.http_status == 401
+                        and self.renew_credentials(force=True, rejected_token=token)):
+                    self._reset()
+                    continue
+                if exc.code != "invalid_session":
                     raise
                 self._reset()
         raise AssertionError("unreachable")

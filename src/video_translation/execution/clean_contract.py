@@ -1,12 +1,18 @@
 """Versioned executor facts supplied independently of frozen model knowledge."""
 
-REVISION = "local-clean-v7-planar-surface"
+REVISION = "local-clean-v8-image-pipeline"
 
 
 def execution_contract():
     return {
         "revision": REVISION,
         "ownership": "Work agent proposes inspect/repair/review actions; executor renders and retains evidence.",
+        "pipeline_diagnosis": (
+            "inspect_pipeline selects an exact current or archived candidate. image_edit retains "
+            "input/generated/conformed PNGs; static images have no video timestamps or frame numbers. "
+            "Rejected pixels remain rejected. Missing historical pipeline registration is a diagnostic "
+            "limit, not proof of file loss or inability to make new repairs; select a different viable method."
+        ),
         "host_image_reference": (
             "When available_tools advertises image_reference, request_reference selects source_id, "
             "one supplied original time, a removal-only prompt and evidence. A source/base-bound "

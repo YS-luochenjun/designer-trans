@@ -90,8 +90,10 @@ def main():
     elif args.command == "export-schemas":
         from video_translation.domain.production import PRODUCTION_CONTRACTS
         from video_translation.execution.adaptive_observe import ObservationDecision
+        from video_translation.execution.task_route import ObservationRouteDecision
 
-        contracts = {**CONTRACTS, **PRODUCTION_CONTRACTS, "agent/observation-decision": ObservationDecision}
+        contracts = {**CONTRACTS, **PRODUCTION_CONTRACTS, "agent/observation-decision": ObservationDecision,
+                     "agent/observation-route": ObservationRouteDecision}
         for name, model in contracts.items():
             path = settings.root / "contracts/schemas" / f"{name}.json"
             path.parent.mkdir(parents=True, exist_ok=True)
