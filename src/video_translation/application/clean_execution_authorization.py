@@ -7,6 +7,7 @@ from .convergence_recovery import _media_evidence
 from .task_supervision import report_work
 from .tasks import Conflict
 from ..domain.execution import ResourceBudget, identity
+from ..domain.limits import allows_revision, testing_unlimited
 from ..execution.review_draft import complete_candidate
 from ..execution.work_conclusions import capacity
 from ..persistence.store import now
@@ -39,7 +40,8 @@ def authorize(service, task_id, request):
                 or state.get("finished") or state.get("candidate") or state.get("pending_turn") is not None
                 or state.get("archive_review") or state.get("pipeline_review")
                 or any(a.get("needs_scope_review") for a in state.get("accepted", []))
-                or not 1 <= request.additional_turns <= 48 or not request.reason.strip()):
+                or not (0 if testing_unlimited(task) else 1) <= request.additional_turns <= 48
+                or not request.reason.strip()):
             raise Conflict("Original cleanup changed or still has a pending candidate or verdict")
         if any(n["status"] in {"running", "waiting_external", "unknown"} or n.get("external_pending")
                for n in task["nodes"]):
@@ -63,7 +65,7 @@ def authorize(service, task_id, request):
         if (report["remaining_external_calls"] is not None
                 and report["remaining_external_calls"] <= report["downstream_model_call_reserve"] + 1):
             raise Conflict("Insufficient original call allowance for new Work and downstream output")
-        if any(task["revisions"].get(node["asset_id"] + ":" + locale, 0) >= task["max_revisions"]
+        if any(not allows_revision(task, task["revisions"].get(node["asset_id"] + ":" + locale, 0))
                for locale in task["target_locales"]):
             raise Conflict("The existing rework allowance is exhausted")
         asset = store.require("asset", node["asset_id"])
@@ -76,8 +78,10 @@ def authorize(service, task_id, request):
             files = _media_evidence(local, task, state, source)
         except (OSError, ValueError, KeyError) as exc:
             raise Conflict("Original media evidence is missing or changed") from exc
-        limit = max(state["turn"], request.expected_clean_limit) + request.additional_turns
-        updated = ResourceBudget.model_validate({**budget, "max_clean_turns": limit}).model_dump()
+        limit = (None if testing_unlimited(task)
+                 else max(state["turn"], request.expected_clean_limit) + request.additional_turns)
+        updated = ResourceBudget.model_validate({
+            **budget, **({"max_clean_turns": limit} if limit is not None else {})}).model_dump()
         record = {"id": key, "task_id": task_id, "node_id": node["id"], "session_id": state["id"],
                   "status": "authorized", "created_at": now(), "authority": "explicit_user",
                   "reason": request.reason, "expected_attempt": node["attempt"],

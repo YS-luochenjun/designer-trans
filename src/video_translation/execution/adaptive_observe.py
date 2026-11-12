@@ -1,7 +1,7 @@
 """Bounded, resumable source observation through explicit sampled-frame decisions."""
 from __future__ import annotations
 
-from video_translation.domain.limits import allows_new_call
+from video_translation.domain.limits import allows_new_call, budget_policy, testing_unlimited
 
 import hashlib
 import json
@@ -275,13 +275,15 @@ class _Observation:
         self.state["frames"] = [self._frame(frame) for frame in self.state["frames"]]
         if self.state["status"] == "finished":
             return self.state["inventory"], self._evidence()
-        while self.state["turn"] < self.LIMIT:
+        unlimited = testing_unlimited(self.task)
+        while unlimited or self.state["turn"] < self.LIMIT:
             self._active()
             frames = self.state["frames"][-24:]
             history = [{"action": h["action"], "reason": h["reason"], "times_ms": h["times_ms"]}
                        for h in self.state["history"]]
-            packet = {**self.inputs, "instructions": INSTRUCTIONS,
-                      "observation": {"round": self.state["turn"] + 1, "max_rounds": self.LIMIT,
+            packet = {**self.inputs, "instructions": INSTRUCTIONS, "budget_policy": budget_policy(self.task),
+                      "observation": {"round": self.state["turn"] + 1,
+                                      "max_rounds": None if unlimited else self.LIMIT,
                                       "frame_clock": self.frame_clock,
                                       "inspection_feedback": self.state.get("inspection_feedback"),
                                       "inspected_times_ms": sorted(set(self.state["inspected_times_ms"])),
@@ -305,7 +307,7 @@ class _Observation:
                 self.state["inspection_feedback"] = validation
                 capture_times = sorted(set(requests.values()))
                 self.state["draft_inventory"] = decision.inventory.model_dump() if decision.inventory else None
-                if self.state["turn"] + 1 < self.LIMIT:
+                if unlimited or self.state["turn"] + 1 < self.LIMIT:
                     self._active()
                     known = {f["time_ms"]: f for f in self.state["frames"]}
                     missing = [t for t in capture_times if t not in known]

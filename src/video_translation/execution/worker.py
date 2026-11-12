@@ -311,7 +311,8 @@ class Worker:
             review.update(output=output, finished_at=now())
             if task["status"] == "cancelled":
                 return
-            if count >= task["max_revisions"]:
+            from video_translation.domain.limits import allows_revision
+            if not allows_revision(task, count):
                 review.update(status="failed", error="审核未通过且已达到局部修正次数上限；候选已保留")
             else:
                 task["revisions"][branch] = count + 1

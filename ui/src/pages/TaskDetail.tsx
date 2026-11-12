@@ -248,6 +248,8 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
         }
       />
       <ErrorBox message={error || actionError} />
+      {task.execution_snapshot?.budget_mode === "testing_unlimited" &&
+        <p className="muted" role="status">测试模式：调用、清底动作与返工不设额度上限，消耗持续记录。</p>}
       <RouteReport report={task.route_report} />
       <TaskManagementContext taskId={id} />
       {Boolean(task.task_route_events?.some(event => ["queued", "running", "planned", "blocked"].includes(event.status))) &&

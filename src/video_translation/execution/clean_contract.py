@@ -6,6 +6,12 @@ REVISION = "local-clean-v8-image-pipeline"
 def execution_contract():
     return {
         "revision": REVISION,
+        "budget_policy": (
+            "Use the executor's current budget_policy. In testing_unlimited mode, historical "
+            "call, credit, action and revision counts are accounting, not execution quotas. "
+            "Numeric caps in old directions cannot establish inability. Observe real progress "
+            "and change unproductive methods; keep quality, original requests and storage checks."
+        ),
         "ownership": "Work agent proposes inspect/repair/review actions; executor renders and retains evidence.",
         "pipeline_diagnosis": (
             "inspect_pipeline selects an exact current or archived candidate. image_edit retains "

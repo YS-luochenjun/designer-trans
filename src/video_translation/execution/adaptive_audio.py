@@ -363,7 +363,8 @@ class AdaptiveAudio:
                         })
                 if actual / target_duration <= 1.251:
                     break
-                if len(revisions) >= self.task.get("max_revisions", 0):
+                from video_translation.domain.limits import allows_revision
+                if not allows_revision(self.task, len(revisions)):
                     raise ValueError("Speech would require speedup above 25%; local revision limit reached")
                 evidence = self._revise(speech, text, raw, key, actual, target_duration, len(revisions) + 1)
                 revisions.append(evidence)

@@ -4,6 +4,7 @@ import math
 from decimal import Decimal
 
 from video_translation.application.tasks import Conflict
+from video_translation.domain.limits import effective_limit
 
 
 def _credits(value):
@@ -30,7 +31,7 @@ def kie_budget_snapshot(db, task):
         else:
             unknown.append(operation["id"])
     total = settled_total + pending_total
-    limit = task.get("max_kie_credits")
+    limit = effective_limit(task, "max_kie_credits", None)
     return {
         "total_credit_limit": limit,
         "settled_credits": float(settled_total),
@@ -43,7 +44,7 @@ def kie_budget_snapshot(db, task):
 
 
 def check_kie_budget(db, task, estimate):
-    limit = task.get("max_kie_credits")
+    limit = effective_limit(task, "max_kie_credits", None)
     if limit is None:
         return
     reserved = _credits(estimate)

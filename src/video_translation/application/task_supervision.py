@@ -5,7 +5,7 @@ from .agent_recovery import replaced_with_authorization
 from .collaboration import affected_nodes, node_for
 from .tasks import Conflict
 from ..domain.execution import identity
-from ..domain.limits import allows_new_call
+from ..domain.limits import allows_new_call, allows_revision
 from ..execution.stage_recovery import invalidate_descendants
 from ..execution.work_conclusions import capacity
 from ..persistence.store import now
@@ -249,7 +249,7 @@ def apply_plan(service, event_id, plan):
         if (not allows_new_call(task, "max_paid_calls", task.get("paid_calls", 0))
                 or remaining is not None and remaining <= report["downstream_model_call_reserve"]):
             raise Conflict("原调用额度不足，Route 不能扩额或清零用量")
-        if any(task["revisions"].get(branch, 0) >= task["max_revisions"] for branch in branches):
+        if any(not allows_revision(task, task["revisions"].get(branch, 0)) for branch in branches):
             raise Conflict("已达到原任务返工上限，候选和未完成项保留")
         if node["definition_id"] == "clean":
             _reopen_clean(local, task, node, event, plan)

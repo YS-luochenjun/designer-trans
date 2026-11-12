@@ -303,9 +303,14 @@ class LetteringProduction(AdaptiveProduction):
         seen_times=set()
         batch_evidence=[]
         revisions=0
-        max_revisions=self.task.get('max_revisions',1)
-        limit=len(batches)*(max_revisions+1)+max_revisions+2
-        for turn in range(limit):
+        from itertools import count
+        from video_translation.domain.limits import effective_limit
+        max_revisions=effective_limit(self.task,'max_revisions',1)
+        limit=(None if max_revisions is None
+               else len(batches)*(max_revisions+1)+max_revisions+2)
+        for turn in count():
+            if limit is not None and turn >= limit:
+                break
             self.active()
             frames=self.frames(self.source,times,'原片',f'visual-source-{turn}')
             clean=self.e.output(self.task,self.node,'clean')
@@ -318,7 +323,7 @@ class LetteringProduction(AdaptiveProduction):
                 'translation':self.e.output(self.task,self.node,'translate'),'plan':plan,
                 'rendered_layers': result.get('layers', []),
                 'candidate_sha256':result['sha256'],'render_error':result.get('render_error'),
-                'remaining_reviews':limit-turn,
+                'remaining_reviews':None if limit is None else limit-turn,
                 'review_draft': draft, 'known_cleanup_gaps': clean.get('unresolved', []),
                 'instructions':'三路对照检查残字、背景接缝、字形布局运动和主体。接受必须是实际看到的当前SHA。字层失败可局部revise，补充inspect；清底问题须blocked，不能用新增底板遮盖。'
                     + ('当前是用户授权的尽力审看草稿。真实缺陷照实记录；不要求细节完美，不将草稿当质量通过。blocked时保留可播放版本供人判断。' if draft else '')},
@@ -367,7 +372,7 @@ class LetteringProduction(AdaptiveProduction):
                 raise ValueError('局部修订必须指定当前文字实例')
             for source_id,entry in changes.items():
                 self.check_motion(entry['motion'],self.texts[source_id])
-            if revisions >= max_revisions:
+            if max_revisions is not None and revisions >= max_revisions:
                 if draft and not result.get('render_error'):
                     batch_evidence.append({'evidence': action['evidence'],
                                            'known_issue': '字层局部修订额度已用尽，未完成所有批次审核'})

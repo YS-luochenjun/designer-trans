@@ -1,6 +1,18 @@
 # 资源预算
 
-新任务将资源预算冻结进 `execution_snapshot.resource_budget`。
+显式 `testing_unlimited` 政策用于用户授权的测试：调用、credits、观察轮数、
+清底动作、恢复和返工不限额，累计用量、未知费用和参考限额继续保存。
+Route 和 Work 读取当前 `budget_policy`，旧工单数字不作为停止依据；
+原请求身份、用户暂停、工具输入规模、磁盘保护与质量门仍生效。
+
+停稳并暂停后，GET `/api/tasks/{id}/testing-budget` 取得版本依据，
+PUT 同一路径提交 `request_id`、`enabled`、`expected_basis` 和用户原因。
+同一请求幂等且审计；不恢复暂停、不制作、不清零使用量。
+停止的清底可交正常 Route 检阅新执行；原候选和未决请求优先。
+`enabled=false` 恢复下列参考限额，继续计入全部累计消耗。
+health 的 `testing_budget_policy_protocol_version=1` 表示运行端支持，具体任务仍须核政策。
+
+bounded 模式新任务将资源预算冻结进 `execution_snapshot.resource_budget`。
 默认任务工作区为2 GiB、10,000文件，保留1 GiB磁盘余量；
 项目外部调用80次、技术恢复8次、清底48轮。业务图片、视频及服务商额度另行约束，
 取实际更严格的上限。调用次数不是金额。

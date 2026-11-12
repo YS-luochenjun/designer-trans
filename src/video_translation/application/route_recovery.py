@@ -11,7 +11,7 @@ import shutil
 from .agent_replacement import _authorize_replacement
 from .tasks import Conflict, TaskService
 from .route_contract_probe import contract_details, successful_rejection_probe
-from ..domain.limits import allows_new_call
+from ..domain.limits import allows_new_call, budget_policy, testing_unlimited
 from ..domain.management import ManagerSettings
 from ..domain.route_recovery import RouteAutonomy, RouteRecoveryDecision
 from ..integrations.agents import AgentAdapter, AgentConfig, UnknownExternalResult
@@ -273,8 +273,9 @@ class RouteRecovery:
                       current - timedelta(hours=1)]
             recent += [r for r in self.store.list("route_probe") if r["task_id"] == task["id"]
                        and datetime.fromisoformat(r["created_at"]) > current - timedelta(hours=1)]
-            if (not config["agent_enabled"] or self.manager._calls_today(self.manager.model_operations())
-                    >= config["max_calls_per_day"] or len(recent) >= policy["max_route_calls_per_hour"]
+            if (not config["agent_enabled"] or not testing_unlimited(task) and (
+                    self.manager._calls_today(self.manager.model_operations()) >= config["max_calls_per_day"]
+                    or len(recent) >= policy["max_route_calls_per_hour"])
                     or not allows_new_call(task, "max_paid_calls", task.get("paid_calls", 0))):
                 self._status(task["id"], "cooling", "Agent allowance reached; automatic recheck remains scheduled")
                 continue
@@ -302,6 +303,7 @@ class RouteRecovery:
         run_id = identifier()
         packet = {
             "instruction": INSTRUCTION, "agent_role": "route", "decision_id": run_id,
+            "budget_policy": budget_policy(task),
             "task": {k: task.get(k) for k in ("id", "status", "control_paused", "paid_calls",
                                              "max_paid_calls", "max_kie_credits", "video_credits_committed")},
             "delegation": {**{k: policy[k] for k in ("authorization_id", "scope", "reason")},
@@ -316,6 +318,8 @@ class RouteRecovery:
                 "id", "status", "expected", "provider_schema_sha256", "failure_evidence", "created_at")}
                 for p in self.store.list("route_probe") if p["task_id"] == task["id"]][:4],
         }
+        if testing_unlimited(task):
+            packet["task"].update(max_paid_calls=None, max_kie_credits=None)
         directory = self.service.settings.runtime / "route" / task["id"] / run_id
         directory.mkdir(parents=True, exist_ok=False)
         (directory / "work-packet.json").write_text(json.dumps(packet, ensure_ascii=False, indent=2),
@@ -464,10 +468,10 @@ class RouteRecovery:
                 recent = [p for p in store.list("route_probe") + store.list("route_run")
                           if p["task_id"] == task["id"] and datetime.fromisoformat(p["created_at"]) >
                           datetime.now(timezone.utc) - timedelta(hours=1)]
-                if (not config["agent_enabled"] or
+                if (not config["agent_enabled"] or not testing_unlimited(task) and (
                         self.manager._calls_today(store.list("manager_operation") + store.list("route_run")
                                                   + store.list("route_probe")) >= config["max_calls_per_day"]
-                        or len(recent) >= policy["max_route_calls_per_hour"]
+                        or len(recent) >= policy["max_route_calls_per_hour"])
                         or not allows_new_call(task, "max_paid_calls", task.get("paid_calls", 0))):
                     raise DiagnosticAllowanceReached("Contract diagnostic model allowance reached")
                 probe_id = identifier()

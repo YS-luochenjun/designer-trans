@@ -115,7 +115,8 @@ def guard(controller, state, summary):
     if checkpoint["actions"] < profile.max_unchanged_actions:
         return
     from .review_draft import complete_candidate
-    if complete_candidate(controller.task):
+    from video_translation.domain.limits import testing_unlimited
+    if testing_unlimited(controller.task) or complete_candidate(controller.task):
         from .clean_supervision import request
         request(controller, state, "progress_review",
                 "The base is unchanged; Route must assess useful next work or a complete viewing candidate",

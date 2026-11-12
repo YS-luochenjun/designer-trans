@@ -292,7 +292,8 @@ class TaskService:
             for review in rejected:
                 branch = review["asset_id"] + ":" + review["locale"]
                 count = task.setdefault("revisions", {}).get(branch, 0)
-                if count >= task["max_revisions"]:
+                from ..domain.limits import allows_revision
+                if not allows_revision(task, count):
                     raise Conflict("该语言分支已达到返工上限；请核对原因后以新任务重新制定要求")
                 task["revisions"][branch] = count + 1
                 task.setdefault("revision_feedback", {})[branch] = [

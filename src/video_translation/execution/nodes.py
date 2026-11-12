@@ -164,6 +164,9 @@ class NodeExecutor:
             raise CapabilityUnavailable("尚未配置后台Agent，请在设置页查看接入步骤")
         schema = model.model_json_schema()
         packet = self.catalog.packet(task, node, inputs, schema)
+        from video_translation.domain.limits import budget_policy, testing_unlimited
+        if testing_unlimited(task):
+            packet["budget_policy"] = budget_policy(task)
         packet["agent_role"] = inputs["agent_role"]
         packet["work_domain"] = ("audio" if node["definition_id"] in {
             "transcribe", "audio_prepare", "audio_voice", "audio"} else "visual")

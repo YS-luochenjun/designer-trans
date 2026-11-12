@@ -1,6 +1,7 @@
 """Finite task resources; limits never approve media or replay old operations."""
 from video_translation.application.tasks import Conflict
 from video_translation.domain.execution import ExecutionProfile
+from video_translation.domain.limits import testing_unlimited
 from video_translation.integrations.agents.errors import CapabilityUnavailable
 
 from .media import MediaError
@@ -22,12 +23,16 @@ def guard_storage(service, task):
 
 
 def guard_external_call(task):
+    if testing_unlimited(task):
+        return
     budget = budget_for(task)
     if budget and task.get("paid_calls", 0) >= budget.max_external_calls:
         raise Conflict("Task resource external call allowance exhausted; no new dispatch")
 
 
 def guard_recovery_call(store, task):
+    if testing_unlimited(task):
+        return
     budget = budget_for(task)
     if budget is None:
         return
@@ -40,8 +45,11 @@ def guard_recovery_call(store, task):
 
 
 def guard_clean_turn(task, state):
+    if testing_unlimited(task):
+        state.pop("completion_review_due", None)
+        return
     execution = state.get("new_execution") or {}
-    if execution and state["turn"] >= execution["new_clean_limit"]:
+    if execution.get("new_clean_limit") is not None and state["turn"] >= execution["new_clean_limit"]:
         raise CapabilityUnavailable(
             "Explicit cleanup execution action window exhausted; original progress and costs retained")
     budget = budget_for(task)

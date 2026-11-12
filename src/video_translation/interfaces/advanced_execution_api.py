@@ -76,13 +76,21 @@ class CleanExecutionAuthorization(Body):
     expected_turn: int = Field(ge=0)
     expected_base_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     expected_clean_limit: int = Field(ge=0, le=10_000)
-    additional_turns: int = Field(ge=1, le=48)
+    additional_turns: int = Field(ge=0, le=48)
     reason: str = Field(min_length=1, max_length=2400)
 
 
 class CleanStageReset(Body):
     request_id: str = Field(min_length=1, max_length=100)
     node_id: str
+    expected_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
+    reason: str = Field(min_length=1, max_length=2400)
+
+
+class TestingBudgetPolicy(Body):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    request_id: str = Field(min_length=1, max_length=100)
+    enabled: bool
     expected_basis: str = Field(pattern=r"^[0-9a-f]{64}$")
     reason: str = Field(min_length=1, max_length=2400)
 
@@ -99,6 +107,17 @@ def advanced_routes(service, worker, manager):
     router = APIRouter(prefix="/api")
     policies = manager.policy_intake
     rework = DirectedRework(service)
+
+    @router.get("/tasks/{task_id}/testing-budget")
+    def testing_budget_context(task_id: str):
+        from video_translation.application.task_budget_policy import context
+        return context(service, task_id)
+
+    @router.put("/tasks/{task_id}/testing-budget")
+    def set_testing_budget(task_id: str, body: TestingBudgetPolicy):
+        from video_translation.application.task_budget_policy import change
+        with worker.guard(task_id):
+            return change(service, task_id, body)
 
     @router.put("/tasks/{task_id}/call-budget")
     def increase_call_budget(task_id: str, body: CallBudgetIncrease):

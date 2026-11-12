@@ -63,6 +63,15 @@
       "title": "Mode",
       "type": "string"
     },
+    "budget_mode": {
+      "default": "bounded",
+      "enum": [
+        "bounded",
+        "testing_unlimited"
+      ],
+      "title": "Budget Mode",
+      "type": "string"
+    },
     "reserve_bytes": {
       "default": 134217728,
       "minimum": 0,

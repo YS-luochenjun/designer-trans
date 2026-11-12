@@ -7,13 +7,16 @@ from video_translation.application.tasks import Conflict
 
 
 def facts(service, task, state):
+    from video_translation.domain.limits import budget_policy, testing_unlimited
     node = next(n for n in task["nodes"] if n["id"] == state["node_id"])
     budget = task.get("execution_snapshot", {}).get("resource_budget") or {}
+    limit = None if testing_unlimited(task) else budget.get("max_clean_turns", state["turn"])
     result = {
         "node_id": node["id"], "session_id": state["id"], "turn": state["turn"],
         "base": dict(state["base"]), "accepted_count": len(state.get("accepted", [])),
-        "clean_turn_limit": budget.get("max_clean_turns"),
-        "remaining_actions": max(0, budget.get("max_clean_turns", state["turn"]) - state["turn"]),
+        "clean_turn_limit": limit,
+        "remaining_actions": None if limit is None else max(0, limit - state["turn"]),
+        "budget_policy": budget_policy(task),
         "quality_passed": False, "media_dependencies_verified": False,
         "applied_work": [{"turn": h["turn"], "action": h["decision"]["action"],
                           "source_id": h["decision"].get("source_id"),
@@ -25,7 +28,7 @@ def facts(service, task, state):
     records = [r for r in service.store.list("clean_execution_authorization")
                if r["task_id"] == task["id"] and r["node_id"] == node["id"]]
     if records:
-        record = records[-1]
+        record = max(records, key=lambda r: (r.get("created_at", ""), r["id"]))
         result["execution_authorization"] = {k: record.get(k) for k in (
             "id", "status", "start_turn", "new_clean_limit", "reason")}
     try:

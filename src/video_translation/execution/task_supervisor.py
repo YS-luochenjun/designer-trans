@@ -9,6 +9,7 @@ from video_translation.application.task_supervision import (
 )
 from video_translation.application.tasks import Conflict
 from video_translation.domain.models import Contract
+from video_translation.domain.limits import budget_policy, effective_limit
 from video_translation.integrations.agents import UnknownExternalResult
 from video_translation.persistence.store import now
 
@@ -58,6 +59,9 @@ INSTRUCTION += (
     "\n用户只与Route沟通。先检阅Work报告，再通过user_summary用一到三句简明中文汇报"
     "当前进展、实际阻塞和下一步；不把Work原文、内部SHA或技术参数作为用户待办。"
     "只有真实业务选择和最终视听验收交用户；不能将已停止的Work说成仍在制作。"
+    "budget_policy是执行器核验的当前运行政策；testing_unlimited时调用、动作和返工没有次数上限，"
+    "历史工单中的数值只是旧政策记录。按真实进展、证据与可用方法安排制作，"
+    "费用和次数继续记账；仅次数增加不能证明某个方法或全片不可处理。"
 )
 
 
@@ -88,6 +92,7 @@ def process_event(executor, task_id):
         snapshot_basis = plan_basis(service, task, node)
         packet = {
             "agent_role": "task_route", "instruction": INSTRUCTION,
+            "budget_policy": budget_policy(task),
             "event": {k: event.get(k) for k in ("id", "trigger", "handoff", "answer", "message_id")},
             "task": {k: task.get(k) for k in ("title", "target_locales", "audio_strategy",
                                               "brief_revision", "paid_calls", "max_paid_calls",
@@ -114,6 +119,9 @@ def process_event(executor, task_id):
                                       for s in store.list("production_session")
                                       if s["task_id"] == task_id],
         }
+        if packet["budget_policy"]["mode"] == "testing_unlimited":
+            packet["task"]["max_paid_calls"] = None
+            packet["task"]["max_revisions"] = effective_limit(task, "max_revisions")
         directory = service.settings.runtime / "tasks" / task_id / "route" / event["id"]
         directory.mkdir(parents=True, exist_ok=True)
         with store.lock:

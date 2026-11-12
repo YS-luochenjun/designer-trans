@@ -11,6 +11,7 @@ from pydantic import Field, model_validator
 
 from video_translation.application.tasks import Conflict
 from video_translation.domain.models import Contract
+from video_translation.domain.limits import budget_policy, testing_unlimited
 from video_translation.integrations.agents.errors import CapabilityUnavailable, UnknownExternalResult
 from video_translation.persistence.store import now
 from .adaptive_observe import ObservationDecision, _digest
@@ -198,6 +199,7 @@ class ObservationSupervisor:
         return result
 
     def _call(self, role, turn, inputs, model, frames):
+        inputs = {**inputs, "budget_policy": budget_policy(self.task)}
         identity = _digest({"session": self.binding, "role": role, "turn": turn})
         intent = _digest({"inputs": inputs, "schema": model.model_json_schema(), "frames": frames})
         existing = self.store.get("task_route_decision", identity)
@@ -256,7 +258,7 @@ class ObservationSupervisor:
             self.original["frames"] + self.state.get("frames", []))}
         missing = sorted(times - known.keys())
         new = set(self.state["new_frame_times"]) | set(missing)
-        if len(new) > self.FRAME_LIMIT:
+        if not testing_unlimited(self.task) and len(new) > self.FRAME_LIMIT:
             raise InvalidRoutePlan("Task Route cumulative frame allowance exhausted")
         if not times:
             return list(known.values())[-24:]
@@ -290,7 +292,8 @@ class ObservationSupervisor:
             raise CapabilityUnavailable("Task Route internal block: " + self.state["reason"])
         _, info = self.visual._info(self.source)
         clock = observation_clock(info, self.inputs["media"]["duration_ms"])
-        while self.state["route_turn"] < self.ROUTE_LIMIT:
+        unlimited = testing_unlimited(self.task)
+        while unlimited or self.state["route_turn"] < self.ROUTE_LIMIT:
             self._active()
             inputs = {
                 "agent_role": "task_route", "instructions": ROUTE_INSTRUCTIONS,
@@ -298,9 +301,12 @@ class ObservationSupervisor:
                 "transcript_provenance": self.transcript_provenance,
                 "frame_clock": clock, "user_answer": self.inputs.get("user_answer"),
                 "history": self.state["history"],
-                "limits": {"route_calls_remaining": self.ROUTE_LIMIT - self.state["route_turn"],
-                           "work_calls_remaining": self.WORK_LIMIT - self.state["work_turn"],
-                           "new_frames_remaining": self.FRAME_LIMIT - len(self.state["new_frame_times"]),
+                "limits": {"route_calls_remaining": None if unlimited else
+                           self.ROUTE_LIMIT - self.state["route_turn"],
+                           "work_calls_remaining": None if unlimited else
+                           self.WORK_LIMIT - self.state["work_turn"],
+                           "new_frames_remaining": None if unlimited else
+                           self.FRAME_LIMIT - len(self.state["new_frame_times"]),
                            "max_frames_per_work": min(24, getattr(getattr(
                                self.e.agent_for(self.task), "config", None), "max_images", 24))},
                 "capabilities": {"continuous_source_frames": True, "audio_listening": False,
@@ -317,7 +323,7 @@ class ObservationSupervisor:
                     route_turn=self.state["route_turn"] + 1)
                 self._save()
                 return self.run()
-            if self.state["work_turn"] >= self.WORK_LIMIT:
+            if not unlimited and self.state["work_turn"] >= self.WORK_LIMIT:
                 self.state["route_turn"] += 1
                 break
             try:

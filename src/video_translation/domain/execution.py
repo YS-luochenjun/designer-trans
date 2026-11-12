@@ -38,6 +38,7 @@ class ResourceBudget(ExecutionContract):
 class ExecutionProfile(ExecutionContract):
     revision: Literal[1] = 1
     mode: ExecutionMode = "efficient_v1"
+    budget_mode: Literal["bounded", "testing_unlimited"] = "bounded"
     reserve_bytes: int = Field(default=128 * 1024**2, ge=0)
     max_unchanged_actions: int = Field(default=12, ge=2, le=100)
     resource_budget: ResourceBudget | None = None

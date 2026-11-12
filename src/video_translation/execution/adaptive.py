@@ -180,8 +180,11 @@ class AdaptiveProduction:
 
     def decision(self, inputs, model, frames, *, key):
         from video_translation.persistence.transaction import TransactionStore
+        from video_translation.domain.limits import budget_policy, testing_unlimited
 
         self.active()
+        if testing_unlimited(self.task):
+            inputs = {**inputs, "budget_policy": budget_policy(self.task)}
         from video_translation.application.task_supervision import live_directions
         directions = live_directions(self.service, self.task["id"], self.node["id"])
         if directions:
@@ -377,7 +380,8 @@ class AdaptiveProduction:
             return result
         if self.task.get('production_policy', {}).get('mode') == 'completion_first':
             raise CapabilityUnavailable('旧完成优先路线已停用：先恢复逐阶段质量检查，不能将有残字底片交给译字')
-        limit = self.task.get('max_visual_steps')
+        from video_translation.domain.limits import effective_limit
+        limit = effective_limit(self.task, 'max_visual_steps', None)
         from .work_autonomy import enabled as open_work
         if open_work(self.task):
             limit = None

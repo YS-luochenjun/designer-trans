@@ -174,6 +174,7 @@ def create_app(settings: Settings | None = None, executor_factory=None):
             "task_supervision_protocol_version": "1",
             "work_report_recovery_protocol_version": "1",
             "clean_stop_scope_protocol_version": "1",
+            "testing_budget_policy_protocol_version": "1",
             "parallel_work_protocol_version": "1",
             "max_concurrent_nodes": settings.max_concurrent_nodes,
             "clean_work_protocol_version": "2",

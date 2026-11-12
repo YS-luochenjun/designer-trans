@@ -28,8 +28,9 @@ def retain(state, action, *, turn, base_sha256, frames, role="work", tool_error=
 
 
 def capacity(task):
+    from video_translation.domain.limits import testing_unlimited
     budget = task.get("execution_snapshot", {}).get("resource_budget") or {}
-    limit = budget.get("max_external_calls")
+    limit = None if testing_unlimited(task) else budget.get("max_external_calls")
     remaining = max(0, limit - task.get("paid_calls", 0)) if limit is not None else None
     model_stages = {"observe", "visual_analyze", "translate", "plan", "visual", "review"}
     reserve = sum(n.get("definition_id") in model_stages

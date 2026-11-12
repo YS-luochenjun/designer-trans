@@ -88,7 +88,8 @@ def handoff(controller, state, summary, *, representation_target=None):
 def bound_work(controller, state, summary):
     """An unchanged assignment has a finite work allowance, independent of phrasing."""
     from .work_autonomy import enabled
-    if complete_candidate(controller.task) or enabled(controller.task):
+    from video_translation.domain.limits import testing_unlimited
+    if testing_unlimited(controller.task) or complete_candidate(controller.task) or enabled(controller.task):
         return
     if not authorized(controller.task) or state.get("pending_turn") is not None:
         return

@@ -1,5 +1,5 @@
 id: video-translation.task-supervision
-version: "1.3.0"
+version: "1.4.0"
 name: 任务协调与实用质量
 status: active
 nodes: []

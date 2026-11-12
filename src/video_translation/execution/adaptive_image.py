@@ -1,7 +1,7 @@
 """Durable optional image production over explicit OpenAI or existing KIE config."""
 from __future__ import annotations
 
-from video_translation.domain.limits import allows_new_call
+from video_translation.domain.limits import allows_new_call, effective_limit
 from video_translation.execution.credit_budget import check_kie_budget
 from video_translation.integrations.providers.image_pricing import image_quote
 
@@ -72,7 +72,8 @@ class ImageProduction:
                 ready, reason = False, "task_snapshot_mismatch"
             elif not allows_new_call(task, 'max_image_calls'):
                 ready, reason = False, "image_budget_disabled"
-            elif (snapshot["provider"] == "kie" and task.get("max_kie_credits") is not None
+            elif (snapshot["provider"] == "kie"
+                  and effective_limit(task, "max_kie_credits", None) is not None
                   and image_quote(snapshot) is None):
                 ready, reason = False, "image_quote_unavailable"
         return {**snapshot, "ready": ready, "reason": reason}

@@ -1,5 +1,6 @@
 """Finite route/work feedback before a genuine clean capability stop."""
 from video_translation.domain.production import CleanRouteDecision
+from video_translation.domain.limits import budget_policy
 from video_translation.persistence.store import now
 from .clean_contract import execution_contract
 from .clean_progress import fingerprint
@@ -75,6 +76,7 @@ def route_deferred(controller, state, queue):
         return False
     packet = {
         "agent_role": "route",
+        "budget_policy": budget_policy(controller.task),
         "goal": "Enable the work agent to make verified clean-plate progress using implemented tools.",
         "instructions": (
             "Diagnose whether a deferred obstacle contradicts execution_contract or loaded knowledge. "

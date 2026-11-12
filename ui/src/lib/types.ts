@@ -161,6 +161,7 @@ export interface Task {
   agent_traces?: AgentTrace[];
   conversations?: NodeMessage[];
   control_paused?: boolean;
+  execution_snapshot?: { budget_mode?: "bounded" | "testing_unlimited" };
   brief_revision?: number;
   visual_route?: VisualRoute;
   max_image_calls?: number | null;
