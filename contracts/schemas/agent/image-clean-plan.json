@@ -1,0 +1,111 @@
+{
+  "$defs": {
+    "FileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FileRef",
+      "type": "object"
+    },
+    "ImageRepair": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "solid",
+            "image_edit",
+            "native_file"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "color": {
+          "default": "#ffffff",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "prompt": {
+          "default": "",
+          "maxLength": 10000,
+          "title": "Prompt",
+          "type": "string"
+        },
+        "candidate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FileRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reason": {
+          "maxLength": 1600,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "method",
+        "reason"
+      ],
+      "title": "ImageRepair",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Sha256",
+      "type": "string"
+    },
+    "repairs": {
+      "items": {
+        "$ref": "#/$defs/ImageRepair"
+      },
+      "maxItems": 200,
+      "title": "Repairs",
+      "type": "array"
+    },
+    "evidence": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "minItems": 1,
+      "title": "Evidence",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_sha256",
+    "evidence"
+  ],
+  "title": "ImageCleanPlan",
+  "type": "object",
+  "$id": "urn:video-translation:agent/image-clean-plan:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

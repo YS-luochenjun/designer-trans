@@ -11,7 +11,7 @@ from pydantic import Field, model_validator
 
 from video_translation.application.tasks import Conflict
 from video_translation.domain.models import Contract
-from video_translation.domain.limits import budget_policy, testing_unlimited
+from video_translation.domain.limits import budget_policy
 from video_translation.integrations.agents.errors import CapabilityUnavailable, UnknownExternalResult
 from video_translation.persistence.store import now
 from .adaptive_observe import ObservationDecision, _digest
@@ -93,8 +93,6 @@ finish须有完整Inventory且unknowns为空；确实不能确认的内容必须
 
 
 class ObservationSupervisor:
-    ROUTE_LIMIT = 3
-    WORK_LIMIT = 2
     FRAME_LIMIT = 48
 
     def __init__(self, executor, task, node, inputs, inventory, consumed):
@@ -258,8 +256,6 @@ class ObservationSupervisor:
             self.original["frames"] + self.state.get("frames", []))}
         missing = sorted(times - known.keys())
         new = set(self.state["new_frame_times"]) | set(missing)
-        if not testing_unlimited(self.task) and len(new) > self.FRAME_LIMIT:
-            raise InvalidRoutePlan("Task Route cumulative frame allowance exhausted")
         if not times:
             return list(known.values())[-24:]
         if missing:
@@ -292,8 +288,7 @@ class ObservationSupervisor:
             raise CapabilityUnavailable("Task Route internal block: " + self.state["reason"])
         _, info = self.visual._info(self.source)
         clock = observation_clock(info, self.inputs["media"]["duration_ms"])
-        unlimited = testing_unlimited(self.task)
-        while unlimited or self.state["route_turn"] < self.ROUTE_LIMIT:
+        while True:
             self._active()
             inputs = {
                 "agent_role": "task_route", "instructions": ROUTE_INSTRUCTIONS,
@@ -301,12 +296,8 @@ class ObservationSupervisor:
                 "transcript_provenance": self.transcript_provenance,
                 "frame_clock": clock, "user_answer": self.inputs.get("user_answer"),
                 "history": self.state["history"],
-                "limits": {"route_calls_remaining": None if unlimited else
-                           self.ROUTE_LIMIT - self.state["route_turn"],
-                           "work_calls_remaining": None if unlimited else
-                           self.WORK_LIMIT - self.state["work_turn"],
-                           "new_frames_remaining": None if unlimited else
-                           self.FRAME_LIMIT - len(self.state["new_frame_times"]),
+                "limits": {"route_calls_remaining": None, "work_calls_remaining": None,
+                           "new_frames_remaining": None,
                            "max_frames_per_work": min(24, getattr(getattr(
                                self.e.agent_for(self.task), "config", None), "max_images", 24))},
                 "capabilities": {"continuous_source_frames": True, "audio_listening": False,
@@ -323,18 +314,21 @@ class ObservationSupervisor:
                     route_turn=self.state["route_turn"] + 1)
                 self._save()
                 return self.run()
-            if not unlimited and self.state["work_turn"] >= self.WORK_LIMIT:
-                self.state["route_turn"] += 1
-                break
             try:
                 frames = self._capture(decision, clock)
             except InvalidRoutePlan as exc:
+                repeated = any(h.get("validation") == str(exc) for h in self.state["history"])
                 self.state["history"].append({
                     "route_decision_id": route_id, "validation": str(exc),
                     "work_action": "not_dispatched", "frames_supplied": 0,
                 })
                 self.state["route_turn"] += 1
+                if repeated:
+                    self.state.update(status="blocked",
+                                      reason="Repeated invalid evidence plan after feedback: " + str(exc))
                 self._save()
+                if repeated:
+                    return self.run()
                 continue
             work_inputs = {
                 "agent_role": "observation_work", "instructions": WORK_INSTRUCTIONS,
@@ -344,6 +338,28 @@ class ObservationSupervisor:
                 "transcript_provenance": self.transcript_provenance,
                 "frame_clock": clock, "audio_sent": False, "video_sent": False,
             }
+            work_intent = _digest({
+                "frames": [{"time_ms": f["time_ms"], "sha256": f["sha256"]} for f in frames],
+                "inventory": self.state["inventory"], "order": decision.work_order,
+                "answer": self.inputs.get("user_answer"),
+            })
+            if any(h.get("work_intent") == work_intent
+                   and h.get("work_action") != "finish" for h in self.state["history"]):
+                reason = "Repeated unresolved Work assignment with unchanged evidence and instructions"
+                repeated = any(h.get("withheld_work_intent") == work_intent
+                               for h in self.state["history"])
+                self.state["history"].append({
+                    "route_decision_id": route_id, "validation": reason,
+                    "withheld_work_intent": work_intent, "work_action": "not_dispatched",
+                    "frames_supplied": 0,
+                })
+                if repeated:
+                    self.state.update(status="blocked", reason=reason)
+                self.state["route_turn"] += 1
+                self._save()
+                if repeated:
+                    return self.run()
+                continue
             work, work_id = self._call("observation_work", self.state["work_turn"], work_inputs,
                                         ObservationDecision, frames)
             self._active()
@@ -353,6 +369,7 @@ class ObservationSupervisor:
                 self.state["inventory"] = work.inventory.model_dump()
             self.state["history"].append({
                 "route_decision_id": route_id, "work_decision_id": work_id,
+                "work_intent": work_intent,
                 "work_action": work.action, "reason": work.reason,
                 "requested_times_ms": work.times_ms, "frames_supplied": len(frames),
                 "inspected_times_ms": [f["time_ms"] for f in frames],
@@ -364,9 +381,6 @@ class ObservationSupervisor:
             self._save()
             if self.state["status"] == "finished":
                 return self.state["inventory"], self._evidence(), None
-        self.state.update(status="blocked", reason="Bounded Route/Work allowance exhausted; evidence retained")
-        self._save()
-        raise CapabilityUnavailable("Task Route internal block: " + self.state["reason"])
 
     def _evidence(self):
         return {

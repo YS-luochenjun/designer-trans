@@ -34,6 +34,16 @@ def require_visual_review(output, task=None):
 
 def require_node_output(task, node, output):
     """Validate a node's business result before marking dependencies complete."""
+    if task.get("task_kind") == "image_translation":
+        if node["definition_id"] == "background_review":
+            require_clean_plate(output, task)
+        elif node["definition_id"] == "compose_images":
+            clean = next(n for n in task["nodes"] if n["definition_id"] == "background_review"
+                         and n["asset_id"] == node["asset_id"])["output"]
+            require_clean_plate(clean, task)
+            if output.get("clean_sha256") != clean["sha256"] or not output.get("artifact_id"):
+                raise CapabilityUnavailable("图片字层没有绑定当前已审核清底")
+        return
     if task.get("visual_route") != "agent_adaptive":
         return
     stage = node["definition_id"]

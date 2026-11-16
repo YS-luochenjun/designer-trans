@@ -2,11 +2,7 @@
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
-
-
-def supports(font, character):
-    missing, glyph = font.getmask(chr(0x10FFFF)), font.getmask(character)
-    return character.isspace() or (missing.size, bytes(missing)) != (glyph.size, bytes(glyph))
+from media_capabilities.fonts import supports
 
 
 def render_fallback(text, output, size, primary, fallbacks, style):

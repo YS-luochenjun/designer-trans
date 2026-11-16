@@ -90,7 +90,8 @@
             "image_edit",
             "wan",
             "image_reference",
-            "reference_plate"
+            "reference_plate",
+            "registered_patch"
           ],
           "type": "string"
         },

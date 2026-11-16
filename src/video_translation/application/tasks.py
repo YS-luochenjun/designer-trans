@@ -8,9 +8,26 @@ from pathlib import Path
 
 from video_translation.agent_runtime.resources import ResourceCatalog
 from video_translation.config import Settings
-from video_translation.domain.models import TaskCreate
+from video_translation.domain.models import TaskCreate, TaskKind
+from video_translation.domain.task_types import execution_owner, uses_route_work
 from video_translation.persistence.store import Store, identifier, now
 from video_translation.workflow.graph import SUCCESS, instantiate, load_definition, task_status
+
+
+VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
+
+
+def infer_asset_kind(suffix: str) -> str:
+    if suffix in VIDEO_SUFFIXES:
+        return "video"
+    if suffix in IMAGE_SUFFIXES:
+        return "image"
+    raise ValueError("仅支持视频或PNG、JPG、JPEG、WEBP、BMP图片")
+
+
+def asset_kind(record: dict) -> str:
+    return record.get("kind") or infer_asset_kind(Path(record.get("name", "")).suffix.lower())
 
 
 class Conflict(ValueError):
@@ -33,9 +50,43 @@ class TaskService:
             (settings.runtime / child).mkdir(parents=True, exist_ok=True)
 
     def create(self, request: TaskCreate, source="local") -> dict:
+        with self.store.lock:
+            fingerprint = hashlib.sha256(json.dumps(
+                {"source": source, "request": request.model_dump(mode="json")},
+                sort_keys=True, ensure_ascii=False,
+            ).encode()).hexdigest()
+            if request.creation_request_id:
+                existing = next((task for task in self.store.list("task")
+                                 if task.get("creation_request_id") == request.creation_request_id), None)
+                if existing:
+                    if existing.get("creation_fingerprint") != fingerprint:
+                        raise Conflict("创建请求身份已用于另一份要求；请保留原任务，核对后再新建")
+                    return self.detail(existing["id"])
+            return self._create(request, source, fingerprint)
+
+    def _create(self, request: TaskCreate, source: str, fingerprint: str) -> dict:
         for asset_id in request.asset_ids:
             self.store.require("asset", asset_id)
-        definition = load_definition(self.settings.root, adaptive=True) if request.visual_route == "agent_adaptive" else self.definition
+        if request.task_kind == TaskKind.video_translation:
+            definition = (
+                load_definition(self.settings.root, adaptive=True)
+                if request.visual_route == "agent_adaptive"
+                else self.definition
+            )
+        else:
+            definition = load_definition(
+                self.settings.root, task_kind=request.task_kind.value
+            )
+        assets = [self.store.require("asset", asset_id) for asset_id in request.asset_ids]
+        kinds = [asset_kind(asset) for asset in assets]
+        if request.task_kind == TaskKind.video_translation and any(kind != "video" for kind in kinds):
+            raise ValueError("视频翻译只能使用视频素材")
+        if request.task_kind == TaskKind.image_translation and any(kind != "image" for kind in kinds):
+            raise ValueError("图片翻译只能使用图片素材")
+        if request.task_kind == TaskKind.face_swap and (
+            len(assets) != 2 or kinds != ["video", "face_source"]
+        ):
+            raise ValueError("视频换脸需要先上传一个视频，再上传一张来源脸图片")
         task_id = identifier()
         timestamp = now()
         from video_translation.integrations.providers.model_catalog import resolve_selection
@@ -48,8 +99,10 @@ class TaskService:
         image_config_snapshot = image_snapshot(KieConfig.from_env() if os.environ.get("VT_MEDIA_PROVIDER") == "kie" else None)
         task = {
             **request.model_dump(),
+            "creation_fingerprint": fingerprint,
             "id": task_id,
             "schema_version": "1.0.0",
+            "task_kind": request.task_kind.value,
             "source": source,
             "status": "queued",
             "created_at": timestamp,
@@ -67,27 +120,45 @@ class TaskService:
             "revisions": {},
             "error": None,
         }
+        task["execution_owner"] = execution_owner(task)
+        if not uses_route_work(task):
+            from .facefusion import initial_execution
+            task["external_execution"] = initial_execution(self, task)
+            task["status"] = task_status(task)
         if request.allow_review_draft:
             from .review_draft import make_authorization
             task["review_draft_authorization"] = make_authorization(task_id)
         self.store.put("task", task)
         return self.detail(task_id)
 
-    def register_asset(self, temporary: Path, name: str) -> dict:
+    def register_asset(self, temporary: Path, name: str, kind: str = "auto") -> dict:
         asset_id = identifier()
         suffix = Path(name).suffix.lower()
-        if suffix not in {".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"}:
-            raise ValueError("仅支持MP4、MOV、MKV、WebM、AVI视频")
+        inferred = infer_asset_kind(suffix)
+        if kind == "auto":
+            kind = inferred
+        if kind not in {"video", "image", "face_source"}:
+            raise ValueError("素材类型只能是video、image或face_source")
+        if kind == "video" and inferred != "video":
+            raise ValueError("视频素材需要使用MP4、MOV、MKV、WebM、AVI或M4V")
+        if kind in {"image", "face_source"} and inferred != "image":
+            raise ValueError("图片素材需要使用PNG、JPG、JPEG、WEBP或BMP")
+        image_metadata = {}
+        if kind in {"image", "face_source"}:
+            from .image_assets import inspect_image
+            image_metadata = inspect_image(temporary)
         target = self.settings.runtime / "assets" / f"{asset_id}{suffix}"
         shutil.move(str(temporary), str(target))
         record = {
             "id": asset_id,
             "name": Path(name).name,
+            "kind": kind,
             "path": str(target),
             "size_bytes": target.stat().st_size,
             "sha256": self.hash_file(target),
             "created_at": now(),
             "content_url": f"/api/assets/{asset_id}/content",
+            **image_metadata,
         }
         self.store.put("asset", record)
         return self.public_asset(record)
@@ -159,6 +230,12 @@ class TaskService:
                 "error",
             )
         } | {
+            "task_kind": task.get("task_kind", "video_translation"),
+            "execution_owner": execution_owner(task),
+            "external_execution": task.get("external_execution"),
+            "design_profile": task.get("design_profile", {}),
+            "execution_readiness": ("external_tool" if not uses_route_work(task)
+                                    else task.get("workflow", {}).get("execution", "ready")),
             "progress": {"done": sum(n["status"] in SUCCESS for n in nodes), "total": len(nodes)},
             "current_nodes": [
                 n["label"] + (f" · {n['locale']}" if n["locale"] else "")
@@ -172,6 +249,9 @@ class TaskService:
 
     def detail(self, task_id):
         task = self.store.require("task", task_id)
+        if not uses_route_work(task):
+            from .facefusion import detail as face_detail
+            return face_detail(self, task)
         current_nodes = {n["id"] for n in task["nodes"]}
 
         def active(row):
@@ -185,12 +265,14 @@ class TaskService:
             [e for e in self.store.list("task_route_event") if active(e)],
             key=lambda e: (e["created_at"], e["id"]))
         from .route_reports import report
+        from .design_tasks import workspace
+        assets = [self.public_asset(self.store.require("asset", value)) for value in task["asset_ids"]]
         for node in task["nodes"]:
             node["route_report"] = report(task, route_events, node)
         for event in route_events:
             owner = next((n for n in task["nodes"] if n["id"] == event["node_id"]), None)
             if owner and owner["attempt"] == event["attempt"] and event["status"] in {
-                    "queued", "running", "planned", "waiting_work", "blocked"}:
+                    "queued", "running", "planned", "waiting_work", "waiting_reconciliation", "blocked"}:
                 owner["route_state"] = event["status"]
         for session in sessions:
             owner = next((n for n in task["nodes"] if n["id"] == session["node_id"]), None)
@@ -203,7 +285,8 @@ class TaskService:
         return {
             **task,
             **self.summary(task),
-            "assets": [self.public_asset(self.store.require("asset", value)) for value in task["asset_ids"]],
+            "assets": assets,
+            "design_workspace": workspace(task, assets),
             "artifacts": [
                 self.public_asset(r) for r in self.store.list("artifact") if active(r)
             ],
@@ -249,6 +332,8 @@ class TaskService:
         return self.detail(task_id)
 
     def retry(self, task_id):
+        if not uses_route_work(self.store.require("task", task_id)):
+            raise Conflict("FaceFusion 不使用翻译节点重试；请在换脸工作区核对原运行后调整配置")
         from video_translation.execution.remote import reconcile_kie_operations
         from .agent_recovery import replaced_with_authorization
         operations = reconcile_kie_operations(self, task_id)
@@ -449,15 +534,22 @@ class TaskService:
             if task["status"] == "cancelled":
                 raise Conflict("任务已取消，候选副本保留但不登记交付")
             node = next(n for n in task["nodes"] if n["id"] == node_id)
-            review = next(
-                n
-                for n in task["nodes"]
-                if n["definition_id"] == "review"
-                and n["asset_id"] == node["asset_id"]
-                and n["locale"] == node["locale"]
-            )
-            if review["status"] != "succeeded" or review["output"].get("approved_sha256") != digest:
-                raise Conflict("当前审核版本不能放行交付")
+            if task.get("task_kind") == "image_translation" and node["definition_id"] == "deliver":
+                from .image_delivery import reviewed_members
+                from ..persistence.transaction import TransactionStore
+                if delivery.get("locale") != node["locale"] or digest != delivery.get("sha256"):
+                    raise Conflict("图片语言包与当前交付节点不一致")
+                reviewed_members(self, task, delivery, TransactionStore(self.store, db).require)
+            else:
+                review = next(
+                    n
+                    for n in task["nodes"]
+                    if n["definition_id"] == "review"
+                    and n["asset_id"] == node["asset_id"]
+                    and n["locale"] == node["locale"]
+                )
+                if review["status"] != "succeeded" or review["output"].get("approved_sha256") != digest:
+                    raise Conflict("当前审核版本不能放行交付")
             node.update(status="succeeded", output=delivery, finished_at=now())
             task["status"] = task_status(task)
             task["updated_at"] = now()
@@ -490,6 +582,10 @@ class TaskService:
                     lambda op: op.update(status="unknown", error="进程中断，外部结果待核对"),
                 )
         for task in self.store.list("task"):
+            if not uses_route_work(task):
+                from .facefusion import recover
+                recover(self, task)
+                continue
             unknown = {
                 op["node_id"]
                 for op in self.store.list("operation")

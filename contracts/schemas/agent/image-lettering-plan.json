@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "ImageLettering": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "style": {
+          "$ref": "#/$defs/LetterStyle"
+        }
+      },
+      "required": [
+        "source_id",
+        "style"
+      ],
+      "title": "ImageLettering",
+      "type": "object"
+    },
+    "LetterStyle": {
+      "additionalProperties": false,
+      "properties": {
+        "font_id": {
+          "default": "default",
+          "maxLength": 120,
+          "title": "Font Id",
+          "type": "string"
+        },
+        "font_size": {
+          "maximum": 400,
+          "minimum": 8,
+          "title": "Font Size",
+          "type": "integer"
+        },
+        "color": {
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Color",
+          "type": "string"
+        },
+        "outline_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Outline Color",
+          "type": "string"
+        },
+        "outline_width": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Outline Width",
+          "type": "integer"
+        },
+        "shadow_color": {
+          "default": "#000000",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "title": "Shadow Color",
+          "type": "string"
+        },
+        "shadow_x": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow X",
+          "type": "integer"
+        },
+        "shadow_y": {
+          "default": 0,
+          "maximum": 40,
+          "minimum": -40,
+          "title": "Shadow Y",
+          "type": "integer"
+        },
+        "align": {
+          "default": "center",
+          "enum": [
+            "left",
+            "center",
+            "right"
+          ],
+          "title": "Align",
+          "type": "string"
+        }
+      },
+      "required": [
+        "font_size",
+        "color"
+      ],
+      "title": "LetterStyle",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Sha256",
+      "type": "string"
+    },
+    "clean_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Clean Sha256",
+      "type": "string"
+    },
+    "locale": {
+      "title": "Locale",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ImageLettering"
+      },
+      "maxItems": 200,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "source_sha256",
+    "clean_sha256",
+    "locale"
+  ],
+  "title": "ImageLetteringPlan",
+  "type": "object",
+  "$id": "urn:video-translation:agent/image-lettering-plan:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

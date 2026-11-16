@@ -13,6 +13,7 @@ from video_translation.persistence.store import now
 
 class LetteringProduction(AdaptiveProduction):
     def plan(self):
+        from media_capabilities.fonts import catalog
         design = self.e.output(self.task,self.node,'visual_analyze')
         translation = self.e.output(self.task,self.node,'translate')
         if self.e.kie_for(self.task):
@@ -25,7 +26,9 @@ class LetteringProduction(AdaptiveProduction):
             return {'lettering': [], 'speakers': [], 'preserve_music': True, 'notes': [],
                     '_skip': '没有待译文字或人声'}
         result = self.decision({'inventory':self.inventory,'source_design':design,'translation':translation,
-            'fonts':list(self.fonts()),'voices':voices,'locale':self.node['locale'],
+            'fonts':list(self.fonts()),
+            'font_catalog':catalog(self.fonts(), ''.join(i["text"] for i in translation["items"])),
+            'voices':voices,'locale':self.node['locale'],
             'image_artwork_available':allows_new_call(self.task, 'max_image_calls') and self.e.image_ready(self.task,transparent=True),
             'preserve_background':self.e.preserve_background(self.task,self.inventory),
             'revision_feedback':self.task.get('revision_feedback',{}).get(self.node['asset_id']+':'+self.node['locale'],[]),
@@ -286,6 +289,8 @@ class LetteringProduction(AdaptiveProduction):
             plan = revised
 
     def visual(self):
+        from .review_checkpoint import ReviewCheckpoint
+        from .frame_clock import sample_index
         result=self.e.output(self.task,self.node,'typography')
         from .stage_quality import require_production_base
         require_production_base(self.e.output(self.task,self.node,'clean'), self.task)
@@ -294,105 +299,109 @@ class LetteringProduction(AdaptiveProduction):
         if not self.texts:
             return {**result, "visual_review": "no_translated_text_required",
                     "_skip": "原片没有需要重建的译文字层"}
-        plan=result['plan']
         instances=list(self.texts.values())
         batches=[instances[i:i+2] for i in range(0,len(instances),2)]
-        batch_index=0
-        times=self.times(batches[0])
-        base_times=set(times)
-        seen_times=set()
-        batch_evidence=[]
-        revisions=0
-        from itertools import count
-        from video_translation.domain.limits import effective_limit
-        max_revisions=effective_limit(self.task,'max_revisions',1)
-        limit=(None if max_revisions is None
-               else len(batches)*(max_revisions+1)+max_revisions+2)
-        for turn in count():
-            if limit is not None and turn >= limit:
-                break
+        checkpoint=ReviewCheckpoint(self,result,batches)
+        state=checkpoint.state
+        if state.get("completed_output"):
+            self.verified(state["completed_output"])
+            return state["completed_output"]
+        _,clock=self.media._info(self.source)
+        while True:
             self.active()
-            frames=self.frames(self.source,times,'原片',f'visual-source-{turn}')
+            if self.store.require("task",self.task["id"]).get("control_paused"):
+                checkpoint.save()
+                return {"_paused": True}
+            result=state["result"]
+            plan=result["plan"]
+            batch_index=state["batch_index"]
+            times=state["times_ms"]
+            turn=state["turn"]
             clean=self.e.output(self.task,self.node,'clean')
-            frames+=self.frames(self.verified(clean),times,'无字底片',f'visual-clean-{turn}')
-            frames+=self.frames(self.verified(result),times,'当前译片',f'visual-target-{turn}')
-            seen_times.update(times)
-            action=self.decision({'source_design':self.e.output(self.task,self.node,'visual_analyze'),
-                'review_source_ids':[item['id'] for item in batches[batch_index]],
-                'observed_times_ms':sorted(seen_times),
-                'translation':self.e.output(self.task,self.node,'translate'),'plan':plan,
-                'rendered_layers': result.get('layers', []),
-                'candidate_sha256':result['sha256'],'render_error':result.get('render_error'),
-                'remaining_reviews':None if limit is None else limit-turn,
-                'review_draft': draft, 'known_cleanup_gaps': clean.get('unresolved', []),
-                'instructions':'三路对照检查残字、背景接缝、字形布局运动和主体。接受必须是实际看到的当前SHA。字层失败可局部revise，补充inspect；清底问题须blocked，不能用新增底板遮盖。'
-                    + ('当前是用户授权的尽力审看草稿。真实缺陷照实记录；不要求细节完美，不将草稿当质量通过。blocked时保留可播放版本供人判断。' if draft else '')},
-                LetteringDecision,frames,key=f'visual-review-{turn}')
+            action=state.get("pending_action")
+            if action is None:
+                pending=state.get("pending_check")
+                if pending is None:
+                    frames=self.frames(self.source,times,'原片',f'visual-source-{turn}')
+                    frames+=self.frames(self.verified(clean),times,'无字底片',f'visual-clean-{turn}')
+                    frames+=self.frames(self.verified(result),times,'当前译片',f'visual-target-{turn}')
+                    checkpoint.observe(frames)
+                    inputs={
+                    'source_design':self.e.output(self.task,self.node,'visual_analyze'),
+                    'review_source_ids':[item['id'] for item in batches[batch_index]],
+                    'observed_times_ms':sorted({r["requested_time_ms"] for r in state["observations"]}),
+                    'review_checkpoint':checkpoint.context(),
+                    'translation':self.e.output(self.task,self.node,'translate'),'plan':plan,
+                    'rendered_layers':result.get('layers',[]),
+                    'candidate_sha256':result['sha256'],'render_error':result.get('render_error'),
+                    'remaining_reviews':None,'review_draft':draft,
+                    'known_cleanup_gaps':clean.get('unresolved',[]),
+                    'instructions':(
+                        '三路对照检查残字、背景接缝、字形布局运动和主体，接续review_checkpoint中的已核事实。'
+                        '接受必须是实际看到的当前SHA。字层失败可局部revise；补查写具体新问题及inspection_focus。'
+                        '需连续片段或其他工具则blocked交Route换法，不能来回索要已检查帧。'
+                        '清底问题须blocked，不能用新增底板遮盖。'
+                        + ('当前为授权草稿，缺陷照实记录，不当质量通过。' if draft else ''))}
+                    pending={"inputs":inputs,"frames":frames,"key":f'visual-review-{turn}'}
+                    state["pending_check"]=pending
+                    checkpoint.save()
+                action=self.decision(pending["inputs"],LetteringDecision,pending["frames"],key=pending["key"])
+                if action['candidate_sha256']!=result['sha256']:
+                    raise ValueError('画面评审未绑定当前候选哈希')
+                checkpoint.report(action)
             if action['candidate_sha256']!=result['sha256']:
                 raise ValueError('画面评审未绑定当前候选哈希')
-            if action['action']=='accept':
+            if action['action'] in {'accept','blocked'}:
+                if action['action']=='blocked' and not (draft and not result.get('render_error')):
+                    state["unresolved"]={"reason":action["reason"],"evidence":action["evidence"]}
+                    checkpoint.applied()
+                    raise CapabilityUnavailable('画面对照未通过：'+action['reason'])
                 if result.get('render_error'):
                     raise ValueError('不能接受字层尚未生成的候选')
-                if not base_times.issubset(seen_times):
+                required={sample_index(t,clock["rate"],clock["frames"])
+                          for t in self.times(batches[batch_index])}
+                seen={r["frame_index"] for r in state["observations"] if r["role"]=='当前译片'}
+                if not required.issubset(seen):
                     raise ValueError('该批文字尚缺完整抽样比较')
-                batch_evidence.append({'source_ids':[item['id'] for item in batches[batch_index]],
-                    'times_ms':sorted(seen_times),'evidence':action['evidence'],'sha256':result['sha256']})
+                batch_evidence=state["batch_evidence"]
+                batch_evidence.append({
+                    'source_ids':[item['id'] for item in batches[batch_index]],
+                    'frame_indices':sorted(seen),'times_ms':list(times),
+                    'evidence':action['evidence'],'sha256':result['sha256'],
+                    **({'known_issue':action["reason"]} if action["action"]=='blocked' else {})})
                 batch_index+=1
                 if batch_index < len(batches):
-                    times=self.times(batches[batch_index])
-                    base_times=set(times)
-                    seen_times=set()
+                    state.update(batch_index=batch_index,times_ms=self.times(batches[batch_index]))
+                    checkpoint.applied()
                     continue
                 if draft and any(b.get('known_issue') for b in batch_evidence):
-                    return self.draft_visual_result(result, batch_evidence)
-                artifact=self.service.artifact(self.task['id'],self.node,Path(result['path']),'video','已检查画面候选')
-                return {**result,'artifact_id':artifact['id'],
-                    'visual_evidence':[value for batch in batch_evidence for value in batch['evidence']],
-                    'visual_batches':batch_evidence,'visual_review':'agent_checked'}
-            if action['action']=='blocked':
-                if draft and not result.get('render_error'):
-                    batch_evidence.append({
-                        'source_ids': [item['id'] for item in batches[batch_index]],
-                        'times_ms': sorted(seen_times), 'evidence': action['evidence'],
-                        'sha256': result['sha256'], 'known_issue': action['reason']})
-                    batch_index += 1
-                    if batch_index < len(batches):
-                        times = self.times(batches[batch_index])
-                        base_times, seen_times = set(times), set()
-                        continue
-                    return self.draft_visual_result(result, batch_evidence)
-                raise CapabilityUnavailable('画面对照未通过：'+action['reason'])
+                    output=self.draft_visual_result(result,batch_evidence)
+                else:
+                    artifact=self.service.artifact(self.task['id'],self.node,Path(result['path']),'video','已检查画面候选')
+                    output={**result,'artifact_id':artifact['id'],
+                        'visual_evidence':[e for batch in batch_evidence for e in batch['evidence']],
+                        'visual_batches':batch_evidence,'visual_review':'agent_checked'}
+                state["completed_output"]=output
+                checkpoint.applied()
+                return output
             if action['action']=='inspect':
-                if not action['times_ms'] or len(set(action['times_ms'])) > 8:
-                    raise ValueError('三路补充观察需要1–8个时间点，保证不超过Agent的24张图上限')
-                times=action['times_ms']
+                checkpoint.inspect(action,[item["id"] for item in batches[batch_index]])
                 continue
             changes={p['source_id']:p for p in action['revisions']}
             if not changes or not set(changes)<=set(self.texts) or len(changes)!=len(action['revisions']):
                 raise ValueError('局部修订必须指定当前文字实例')
             for source_id,entry in changes.items():
                 self.check_motion(entry['motion'],self.texts[source_id])
-            if max_revisions is not None and revisions >= max_revisions:
-                if draft and not result.get('render_error'):
-                    batch_evidence.append({'evidence': action['evidence'],
-                                           'known_issue': '字层局部修订额度已用尽，未完成所有批次审核'})
-                    return self.draft_visual_result(result, batch_evidence)
-                raise CapabilityUnavailable('当前画面局部修订已达到任务授权上限')
-            revisions+=1
-            plan=[changes.get(p['source_id'],p) for p in plan]
-            batch_index=0
-            times=self.times(batches[0])
-            base_times=set(times)
-            seen_times=set()
-            batch_evidence=[]
+            revised=[changes.get(p['source_id'],p) for p in plan]
+            if revised==plan:
+                checkpoint.applied()
+                raise CapabilityUnavailable('局部修订未改变字层方案，交Route调整方法')
+            state["revisions"]+=1
             try:
-                result=self.render(plan)
+                result=self.render(revised)
             except ValueError as exc:
-                result={**result,'render_error':str(exc)[:1200],'plan':plan}
-        if draft and not result.get('render_error'):
-            batch_evidence.append({'evidence': [], 'known_issue': '审看次数已用尽，部分批次尚未完成对照'})
-            return self.draft_visual_result(result, batch_evidence)
-        raise CapabilityUnavailable('画面对照达到修订上限，保留候选与缺陷记录，尚未通过')
+                result={**result,'render_error':str(exc)[:1200],'plan':revised}
+            checkpoint.new_candidate(result,revised,batches)
 
     def draft_visual_result(self, result, batches):
         artifact = self.service.artifact(self.task['id'], self.node, Path(result['path']),

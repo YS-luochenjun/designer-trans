@@ -117,6 +117,26 @@
       "title": "CleanQuality",
       "type": "object"
     },
+    "FileRef": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "title": "FileRef",
+      "type": "object"
+    },
     "MaskPoint": {
       "additionalProperties": false,
       "properties": {
@@ -330,6 +350,7 @@
     "action": {
       "enum": [
         "inspect",
+        "inspect_metadata",
         "track",
         "inspect_pipeline",
         "inspect_archive",
@@ -393,7 +414,8 @@
             "wan",
             "local_surface",
             "tracked_donor",
-            "reference_plate"
+            "reference_plate",
+            "registered_patch"
           ],
           "type": "string"
         },
@@ -403,6 +425,31 @@
       ],
       "default": null,
       "title": "Method"
+    },
+    "candidate_manifest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FileRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tool_receipt": {
+      "anyOf": [
+        {
+          "maxLength": 240,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool Receipt"
     },
     "reference_id": {
       "anyOf": [

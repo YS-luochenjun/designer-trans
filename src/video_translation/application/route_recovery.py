@@ -16,6 +16,7 @@ from ..domain.management import ManagerSettings
 from ..domain.route_recovery import RouteAutonomy, RouteRecoveryDecision
 from ..integrations.agents import AgentAdapter, AgentConfig, UnknownExternalResult
 from ..integrations.agents.failure_evidence import safe_failure_evidence
+from ..integrations.agents.errors import CapabilityUnavailable
 from ..persistence.store import identifier, now
 from ..persistence.transaction import TransactionStore
 
@@ -161,6 +162,9 @@ class RouteRecovery:
         self.guard = guard or (lambda task_id: manager.dispatch_lock)
 
     def manages(self, task):
+        from video_translation.domain.task_types import uses_route_work
+        if not uses_route_work(task):
+            return False
         policy = self.store.get("route_policy", task["id"])
         return bool(policy and policy["enabled"] and any(
             n["id"] == policy["node_id"] and n["status"] not in {"succeeded", "skipped", "cancelled"}
@@ -182,6 +186,53 @@ class RouteRecovery:
             from ..execution.convergence import ERROR as CONVERGENCE_ERROR
             from .clean_route_recovery import SESSION_ERROR, requeue_predispatch
             from .materialization_recovery import ERROR as MATERIALIZATION_ERROR
+            from .clean_design_continuation import schedule as schedule_design
+            from ..execution.clean_design_binding import ERROR as DESIGN_ERROR, SETTLED_ERROR
+            from .storage_continuation import schedule as schedule_storage, storage_error
+            from .clean_rework_continuation import schedule as schedule_rework, ERROR as REWORK_ERROR
+            if any(n["id"] == policy["node_id"] and n["status"] == "failed"
+                   and n.get("error") == REWORK_ERROR for n in task["nodes"]):
+                try:
+                    with self.guard(task["id"]), self.store.connection() as db:
+                        store = TransactionStore(self.store, db)
+                        resumed = schedule_rework(
+                            TaskService(self.service.settings, store), store.require("task", task["id"]))
+                    if resumed:
+                        self._status(task["id"], "working",
+                                     "Original quality direction queued for Work; interval coverage is retained.")
+                        return True
+                except (Conflict, CapabilityUnavailable, OSError, ValueError, KeyError) as exc:
+                    self._status(task["id"], "reconciling", str(exc)[:1500])
+                continue
+            if any(n["id"] == policy["node_id"] and n["status"] == "failed"
+                   and n.get("error") in {DESIGN_ERROR, SETTLED_ERROR} for n in task["nodes"]):
+                try:
+                    with self.guard(task["id"]), self.store.connection() as db:
+                        store = TransactionStore(self.store, db)
+                        resumed = schedule_design(
+                            TaskService(self.service.settings, store), store.require("task", task["id"]))
+                    if resumed:
+                        self._status(task["id"], "working",
+                                     "Source design reconciled; original cleanup queued for Worker review or repair.")
+                        return True
+                except (Conflict, CapabilityUnavailable, OSError, ValueError, KeyError) as exc:
+                    self._status(task["id"], "reconciling", str(exc)[:1500])
+                continue
+            if any(n["id"] == policy["node_id"] and n["status"] == "failed"
+                   and storage_error(n.get("error")) for n in task["nodes"]):
+                try:
+                    with self.guard(task["id"]), self.store.connection() as db:
+                        store = TransactionStore(self.store, db)
+                        resumed = schedule_storage(
+                            TaskService(self.service.settings, store), store.require("task", task["id"]))
+                    if resumed:
+                        self._status(task["id"], "working",
+                                     "Storage condition resolved; original session queued for Worker.")
+                        return True
+                except (Conflict, OSError, ValueError, KeyError) as exc:
+                    self._status(task["id"], "resource_blocked", str(exc)[:1500],
+                                 original_kind="storage")
+                continue
             if any(n["id"] == policy["node_id"] and n["status"] == "failed"
                    and n.get("error") == MATERIALIZATION_ERROR for n in task["nodes"]):
                 try:
@@ -282,8 +333,10 @@ class RouteRecovery:
             try:
                 with self.guard(task["id"]):
                     context = original_context(self.service, task)
-            except (Conflict, KeyError, ValueError, OSError):
-                self._status(task["id"], "reconciling", "Original result, external operation or task state needs reconciliation")
+            except (Conflict, KeyError, ValueError, OSError) as exc:
+                from .reconciliation import snapshot
+                self._status(task["id"], "reconciling", str(exc)[:1500],
+                             reconciliation=snapshot(self.service, task))
                 continue
             if any(r["status"] == "needs_attention" and r.get("expected") == context["expected"]
                    and r.get("authorization_id") == policy["authorization_id"] for r in runs):

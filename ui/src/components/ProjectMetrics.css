@@ -1,0 +1,286 @@
+.project-home > .page-head {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.project-home > .page-head h1 {
+  margin-bottom: 0;
+}
+.project-home > .page-head > .actions {
+  min-width: 0;
+}
+.home-activity,
+.home-activity > span,
+.home-activity > a {
+  display: inline-flex;
+  align-items: center;
+}
+.home-activity {
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+.home-activity > span {
+  gap: 7px;
+}
+.home-activity strong {
+  color: var(--color-ink);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.home-activity i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-muted);
+}
+.home-activity > a {
+  min-height: 36px;
+  gap: 3px;
+  color: var(--color-muted);
+}
+.home-activity > a:hover {
+  color: var(--color-accent);
+}
+.project-home .manager-layout:not(.has-decisions):not(:has(.manager-decision-feedback)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.project-home .manager-layout:not(.has-decisions) .manager-todos:not(:has(.manager-decision-feedback)) {
+  display: none;
+}
+.project-home .manager-log {
+  height: clamp(220px, 28vh, 300px);
+}
+.project-home .manager-log:has(> .empty) {
+  height: 160px;
+}
+.project-home .manager-log > .empty {
+  min-height: 0;
+  height: 100%;
+  padding: 16px;
+}
+.project-metrics {
+  margin-top: 24px;
+  padding: 0;
+}
+.project-metrics-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 12px;
+}
+.project-metrics-heading h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.project-metrics-stale {
+  margin: 0 0 10px;
+  color: var(--color-amber);
+  font-size: 12px;
+}
+.project-metrics-periods {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+.project-metrics-periods > button {
+  min-height: 28px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 12px;
+  line-height: 20px;
+}
+.project-metrics-periods > button[aria-pressed="true"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.project-metrics-periods > button:hover {
+  color: var(--color-accent);
+}
+.project-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.project-metric-card {
+  height: 140px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.project-metric-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+  color: var(--color-muted);
+  font-size: 12px;
+}
+a.project-metric-label {
+  width: fit-content;
+}
+a.project-metric-label:hover {
+  color: var(--color-accent);
+}
+.project-metric-label svg {
+  flex-shrink: 0;
+}
+.project-metric-value,
+.project-cost-values {
+  margin-top: 12px;
+  min-height: 34px;
+  color: var(--color-ink);
+  font-size: 26px;
+  line-height: 1.3;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
+}
+.project-metric-value {
+  white-space: nowrap;
+  font-size: clamp(20px, 1.9vw, 26px);
+}
+.project-cost-values {
+  flex-shrink: 0;
+  max-height: 48px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  font-size: 22px;
+  line-height: 24px;
+}
+.project-cost-values:focus-visible,
+.project-metrics-method > div:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.project-cost-values span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 4px;
+  overflow-wrap: anywhere;
+}
+.project-cost-values small {
+  color: var(--color-muted);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+.project-metrics-loading {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  border: 0;
+  background: none;
+}
+.project-metrics-skeleton {
+  display: block;
+  height: 140px;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--color-paper), var(--color-surface), var(--color-paper));
+  background-size: 200% 100%;
+  animation: project-metrics-loading 1.4s ease-in-out infinite;
+}
+.project-metrics-error {
+  min-height: 74px;
+  padding: 16px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  color: var(--color-muted);
+}
+.project-metrics-method {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+.project-metrics-method > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-left: auto;
+  min-height: 28px;
+  cursor: pointer;
+  list-style: none;
+}
+.project-metrics-method > summary::-webkit-details-marker {
+  display: none;
+}
+.project-metrics-method > summary:hover {
+  color: var(--color-accent);
+}
+.project-metrics-method[open] > summary svg {
+  transform: rotate(180deg);
+}
+.project-metrics-method > div {
+  margin: 6px 0 4px;
+  padding: 12px 14px;
+  max-height: 170px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: var(--color-paper);
+}
+.project-metrics-method p {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.project-metrics-method p:last-child {
+  margin-bottom: 0;
+}
+@keyframes project-metrics-loading {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+@media (max-width: 1100px) {
+  .project-metrics-grid,
+  .project-metrics-loading {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .project-home > .page-head {
+    margin-bottom: 20px;
+  }
+  .home-activity {
+    gap: 6px 14px;
+  }
+  .project-metrics {
+    margin-top: 20px;
+  }
+  .project-metrics-grid,
+  .project-metrics-loading {
+    gap: 10px;
+  }
+  .project-metric-card {
+    padding: 14px 12px;
+  }
+  .project-metric-label {
+    gap: 4px;
+  }
+  .project-cost-values {
+    font-size: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-metrics-skeleton { animation: none; }
+}

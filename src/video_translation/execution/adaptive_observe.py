@@ -1,7 +1,7 @@
 """Bounded, resumable source observation through explicit sampled-frame decisions."""
 from __future__ import annotations
 
-from video_translation.domain.limits import allows_new_call, budget_policy, testing_unlimited
+from video_translation.domain.limits import allows_new_call, budget_policy
 
 import hashlib
 import json
@@ -13,7 +13,7 @@ from pydantic import Field, model_validator
 
 from video_translation.application.tasks import Conflict
 from video_translation.domain.models import Contract, Inventory
-from video_translation.integrations.agents.errors import CapabilityUnavailable, UnknownExternalResult
+from video_translation.integrations.agents.errors import UnknownExternalResult
 from video_translation.persistence.store import now
 
 from .efficient_media import visual_for
@@ -48,7 +48,7 @@ class ObservationDecision(Contract):
         return self
 
 
-INSTRUCTIONS = """这是最多六轮的原片主动观察。返回ObservationDecision，不要直接返回Inventory。
+INSTRUCTIONS = """这是持续的原片主动观察。轮数只作复盘参考，避免重复无新证据的检查。返回ObservationDecision，不要直接返回Inventory。
 证据仅包括本轮实际提供的抽样图像和已有转写；本地文件路径不代表看过整片，不代表听过声音。
 若画面文字、显隐时间或主体关系不清楚，优先inspect请求原片内的新时间点（每次1至12个递增毫秒），
 自行补看后再判断；不要把能够补帧看清的问题立即交给用户。可在inspect.inventory保留阶段性清单。
@@ -184,7 +184,11 @@ class _Observation:
                                                "exclusive_end_ms", "requested_time_ms") if key in frame}}
 
     def _active(self):
-        if self.store.require("task", self.task["id"])["status"] == "cancelled":
+        current = self.store.require("task", self.task["id"])
+        if current.get("control_paused"):
+            from .task_route import TaskRoutePaused
+            raise TaskRoutePaused("Source observation paused before its next operation")
+        if current["status"] == "cancelled":
             raise Conflict("任务已取消，停止补帧与观察决策")
         if self.service.hash_file(self.source) != self.source_hash:
             raise Conflict("原片在观察期间发生变化")
@@ -192,6 +196,19 @@ class _Observation:
     def _save(self):
         self.store.put("observation_session", self.state)
         self.service.write_json(self.task["id"], self.node, "observation-session.json", self.state)
+
+    def _route_handoff(self, reason):
+        draft = deepcopy(self.state.get("draft_inventory")) or {
+            "summary": "Source observation requires Route to review the retained evidence",
+            "source_language": self.task.get("source_language") or "und",
+            "texts": [], "speech": [], "has_music": self._music_fact() is True,
+            "preserve_music": True, "unknowns": [], "evidence": [],
+        }
+        draft["unknowns"] = list(dict.fromkeys([*draft["unknowns"], reason]))
+        draft["evidence"].append(
+            "Observation handoff only; no full inventory, audio or quality acceptance is implied.")
+        self.state.update(status="finished", terminal_action="clarify",
+                          inventory=retained_inventory(draft, self._music_fact()))
 
     def _evidence(self):
         inspected = sorted(set(self.state["inspected_times_ms"]))
@@ -275,15 +292,14 @@ class _Observation:
         self.state["frames"] = [self._frame(frame) for frame in self.state["frames"]]
         if self.state["status"] == "finished":
             return self.state["inventory"], self._evidence()
-        unlimited = testing_unlimited(self.task)
-        while unlimited or self.state["turn"] < self.LIMIT:
+        while True:
             self._active()
             frames = self.state["frames"][-24:]
             history = [{"action": h["action"], "reason": h["reason"], "times_ms": h["times_ms"]}
                        for h in self.state["history"]]
             packet = {**self.inputs, "instructions": INSTRUCTIONS, "budget_policy": budget_policy(self.task),
                       "observation": {"round": self.state["turn"] + 1,
-                                      "max_rounds": None if unlimited else self.LIMIT,
+                                      "max_rounds": None, "review_round_threshold": self.LIMIT,
                                       "frame_clock": self.frame_clock,
                                       "inspection_feedback": self.state.get("inspection_feedback"),
                                       "inspected_times_ms": sorted(set(self.state["inspected_times_ms"])),
@@ -291,6 +307,7 @@ class _Observation:
                                       "history": history, "draft_inventory": self.state.get("draft_inventory")}}
             decision, consumed, identity = self._decision(packet, frames)
             validation = None
+            inspection_key = None
             if decision.action == "inspect":
                 try:
                     requests = inspection_requests(decision.times_ms, self.frame_clock)
@@ -304,33 +321,45 @@ class _Observation:
                         "instruction": "No requested frame was captured. Choose valid times using frame_clock.",
                     }
                     requests = {}
+                previous_feedback = self.state.get("inspection_feedback")
                 self.state["inspection_feedback"] = validation
                 capture_times = sorted(set(requests.values()))
-                self.state["draft_inventory"] = decision.inventory.model_dump() if decision.inventory else None
-                if unlimited or self.state["turn"] + 1 < self.LIMIT:
-                    self._active()
-                    known = {f["time_ms"]: f for f in self.state["frames"]}
-                    missing = [t for t in capture_times if t not in known]
-                    if missing:
-                        directory = self.service.node_directory(self.task["id"], self.node)
-                        fresh = self.visual.capture(self.source, directory / f"observe-{self.identity[:12]}-{self.state['turn']}", missing)
-                        for frame in fresh:
-                            known[frame["time_ms"]] = self._frame(frame)
-                    # Recently requested frames remain in the next packet, even when already cached.
-                    self.state["frames"] = [f for f in self.state["frames"] if f["time_ms"] not in capture_times]
-                    for t in capture_times:
-                        frame = dict(known[t])
-                        original_times = [original for original, actual in requests.items()
-                                          if actual == t and original != actual]
-                        if original_times:
-                            frame["requested_time_ms"] = max(original_times)
-                        self.state["frames"].append(frame)
+                if decision.inventory:
+                    self.state["draft_inventory"] = decision.inventory.model_dump()
+                self._active()
+                known = {f["time_ms"]: f for f in self.state["frames"]}
+                missing = [t for t in capture_times if t not in known]
+                inspection_key = _digest({"times": capture_times,
+                                          "draft": self.state.get("draft_inventory")})
+                repeated_invalid = validation and previous_feedback and (
+                    validation["code"] == previous_feedback["code"])
+                repeated_evidence = not validation and not missing and any(
+                    h.get("inspection_key") == inspection_key for h in self.state["history"])
+                if repeated_invalid or repeated_evidence:
+                    self._route_handoff(
+                        "Repeated invalid inspection after concrete feedback" if repeated_invalid else
+                        "Repeated source inspection without new evidence; Route must choose another approach")
+                if missing:
+                    directory = self.service.node_directory(self.task["id"], self.node)
+                    fresh = self.visual.capture(self.source, directory / f"observe-{self.identity[:12]}-{self.state['turn']}", missing)
+                    for frame in fresh:
+                        known[frame["time_ms"]] = self._frame(frame)
+                # Recently requested frames remain in the next packet, even when already cached.
+                self.state["frames"] = [f for f in self.state["frames"] if f["time_ms"] not in capture_times]
+                for t in capture_times:
+                    frame = dict(known[t])
+                    original_times = [original for original, actual in requests.items()
+                                      if actual == t and original != actual]
+                    if original_times:
+                        frame["requested_time_ms"] = max(original_times)
+                    self.state["frames"].append(frame)
             else:
                 result = retained_inventory(decision.inventory.model_dump(), self._music_fact())
                 self.state.update(status="finished", inventory=result, terminal_action=decision.action)
             self.state["history"].append({"decision_id": identity, "action": decision.action,
                                           "times_ms": decision.times_ms, "reason": decision.reason,
                                           "frames_supplied": len(frames), "media": consumed,
+                                          "inspection_key": inspection_key,
                                           **({"validation": validation} if validation else {})})
             self.state["inspected_times_ms"] = sorted(set(self.state["inspected_times_ms"]) |
                                                        {f["time_ms"] for f in frames})
@@ -338,16 +367,8 @@ class _Observation:
             self._save()
             if self.state["status"] == "finished":
                 return self.state["inventory"], self._evidence()
-        self.state["status"] = "limit"
-        self._save()
-        raise CapabilityUnavailable("已达到六轮原片观察上限；保留已检帧与决策，不自动转为用户问题或继续收费")
 
 
 def observe(executor, task, node, inputs, initial_frames) -> tuple[dict, dict]:
-    """Return validated Inventory data and scoped evidence; never create a user question.
-
-    The caller retains inventory business validation and clarification UI ownership.
-    Each model decision goes through executor.call_agent and the existing paid-call
-    budget. Sample extraction is local. Unknown/running intents are never replayed.
-    """
+    """Retain original observation identity, spending guards and evidence across turns."""
     return _Observation(executor, task, node, inputs, initial_frames).run()

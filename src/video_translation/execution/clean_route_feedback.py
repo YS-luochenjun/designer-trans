@@ -82,7 +82,7 @@ def frontier(controller, state, queue, contract, methods_sha):
                                             outcome["original_method"], contract, methods_sha))
     capabilities = controller.capabilities()
     from .work_autonomy import enabled
-    methods = LOCAL_METHODS + (("image_edit", "wan") if enabled(controller.task) else ())
+    methods = LOCAL_METHODS + (("image_edit", "wan", "registered_patch") if enabled(controller.task) else ())
     # Fresh, explicitly applied user feedback permits one new method assessment.
     # Recipe-level duplicate guards and the original call budget still apply.
     user_continuation = any(r.get("trigger") in {"user_continuation", "route_rework"} and r["status"] == "pending"

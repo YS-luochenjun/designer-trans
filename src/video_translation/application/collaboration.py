@@ -101,6 +101,11 @@ class Collaboration:
     def submit(self, task_id, node_id, request: MessageCreate):
         with self.store.lock:
             task = self._editable(task_id)
+            from video_translation.domain.task_types import uses_route_work
+            if not uses_route_work(task):
+                raise Conflict("FaceFusion 任务由外接工具执行，不接收翻译 Route/Work 消息")
+            if task.get("workflow", {}).get("execution") == "draft_only":
+                raise Conflict("草稿任务尚未接入制作执行器，不能发送制作消息")
             if node_for(task, node_id) is None:
                 raise KeyError(node_id)
             key = request.request_id.hex
@@ -145,6 +150,9 @@ class Collaboration:
     def apply(self, task_id, message_id):
         with self.store.lock:
             task = self._editable(task_id)
+            from video_translation.domain.task_types import uses_route_work
+            if not uses_route_work(task):
+                raise Conflict("FaceFusion 任务不能应用翻译 Route/Work 方向")
             message = self.store.require("conversation", message_id)
             if message["task_id"] != task_id:
                 raise KeyError(message_id)

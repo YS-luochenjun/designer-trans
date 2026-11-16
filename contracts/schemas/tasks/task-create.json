@@ -1,5 +1,177 @@
 {
   "$defs": {
+    "DesignProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "workflow_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TaskKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_set_policy": {
+          "default": "provided_source_set",
+          "enum": [
+            "provided_source_set",
+            "single_video"
+          ],
+          "title": "Source Set Policy",
+          "type": "string"
+        },
+        "delivery_grouping": {
+          "default": "locale_bundle",
+          "enum": [
+            "locale_bundle",
+            "per_locale",
+            "single_video"
+          ],
+          "title": "Delivery Grouping",
+          "type": "string"
+        },
+        "review_policy": {
+          "default": "source_locale_member_matrix",
+          "enum": [
+            "source_locale_member_matrix",
+            "sample_then_full",
+            "video_audiovisual",
+            "external_result"
+          ],
+          "title": "Review Policy",
+          "type": "string"
+        },
+        "sample_duration_seconds": {
+          "default": 5,
+          "enum": [
+            3,
+            5
+          ],
+          "title": "Sample Duration Seconds",
+          "type": "integer"
+        },
+        "face_mask": {
+          "default": "standard",
+          "enum": [
+            "standard",
+            "tight"
+          ],
+          "title": "Face Mask",
+          "type": "string"
+        },
+        "preserve_audio": {
+          "default": true,
+          "title": "Preserve Audio",
+          "type": "boolean"
+        },
+        "target_selection": {
+          "default": "reference_frame",
+          "enum": [
+            "reference_frame",
+            "single_person"
+          ],
+          "title": "Target Selection",
+          "type": "string"
+        }
+      },
+      "title": "DesignProfile",
+      "type": "object"
+    },
+    "FaceFusionProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "face_selector_mode": {
+          "default": "reference",
+          "enum": [
+            "reference",
+            "many",
+            "one"
+          ],
+          "title": "Face Selector Mode",
+          "type": "string"
+        },
+        "face_selector_order": {
+          "default": "large-small",
+          "enum": [
+            "left-right",
+            "right-left",
+            "top-bottom",
+            "bottom-top",
+            "small-large",
+            "large-small",
+            "best-worst",
+            "worst-best"
+          ],
+          "title": "Face Selector Order",
+          "type": "string"
+        },
+        "reference_frame_number": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Reference Frame Number",
+          "type": "integer"
+        },
+        "reference_face_position": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Reference Face Position",
+          "type": "integer"
+        },
+        "reference_face_distance": {
+          "default": 0.3,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Reference Face Distance",
+          "type": "number"
+        },
+        "face_mask_types": {
+          "items": {
+            "enum": [
+              "box",
+              "occlusion",
+              "region"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Face Mask Types",
+          "type": "array"
+        },
+        "face_mask_blur": {
+          "default": 0.3,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Face Mask Blur",
+          "type": "number"
+        },
+        "output_video_quality": {
+          "default": 80,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Output Video Quality",
+          "type": "integer"
+        },
+        "target_preview_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Preview Id"
+        }
+      },
+      "title": "FaceFusionProfile",
+      "type": "object"
+    },
     "ResourceBudget": {
       "additionalProperties": false,
       "properties": {
@@ -47,6 +219,15 @@
       },
       "title": "ResourceBudget",
       "type": "object"
+    },
+    "TaskKind": {
+      "enum": [
+        "video_translation",
+        "image_translation",
+        "face_swap"
+      ],
+      "title": "TaskKind",
+      "type": "string"
     }
   },
   "additionalProperties": false,
@@ -122,6 +303,21 @@
       "title": "Title",
       "type": "string"
     },
+    "creation_request_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 16,
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Creation Request Id"
+    },
     "asset_ids": {
       "items": {
         "type": "string"
@@ -131,14 +327,39 @@
       "title": "Asset Ids",
       "type": "array"
     },
+    "task_kind": {
+      "$ref": "#/$defs/TaskKind",
+      "default": "video_translation"
+    },
     "target_locales": {
       "items": {
         "type": "string"
       },
       "maxItems": 12,
-      "minItems": 1,
       "title": "Target Locales",
       "type": "array"
+    },
+    "target_locale_labels": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 12,
+      "title": "Target Locale Labels",
+      "type": "array"
+    },
+    "facefusion": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FaceFusionProfile"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "design_profile": {
+      "$ref": "#/$defs/DesignProfile"
     },
     "source_language": {
       "anyOf": [
@@ -222,8 +443,7 @@
   },
   "required": [
     "title",
-    "asset_ids",
-    "target_locales"
+    "asset_ids"
   ],
   "title": "TaskCreate",
   "type": "object",

@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "ImageRegion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "bbox": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "minItems": 4,
+          "title": "Bbox",
+          "type": "array"
+        },
+        "action": {
+          "default": "translate",
+          "enum": [
+            "translate",
+            "preserve"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "source_text": {
+          "default": "",
+          "maxLength": 8000,
+          "title": "Source Text",
+          "type": "string"
+        },
+        "notes": {
+          "default": "",
+          "maxLength": 1600,
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "bbox"
+      ],
+      "title": "ImageRegion",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "source_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Source Sha256",
+      "type": "string"
+    },
+    "width": {
+      "exclusiveMinimum": 0,
+      "maximum": 10000,
+      "title": "Width",
+      "type": "integer"
+    },
+    "height": {
+      "exclusiveMinimum": 0,
+      "maximum": 10000,
+      "title": "Height",
+      "type": "integer"
+    },
+    "complete": {
+      "title": "Complete",
+      "type": "boolean"
+    },
+    "observations": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Observations",
+      "type": "array"
+    },
+    "regions": {
+      "items": {
+        "$ref": "#/$defs/ImageRegion"
+      },
+      "maxItems": 200,
+      "title": "Regions",
+      "type": "array"
+    },
+    "protected_regions": {
+      "items": {
+        "$ref": "#/$defs/ImageRegion"
+      },
+      "maxItems": 200,
+      "title": "Protected Regions",
+      "type": "array"
+    },
+    "no_text_verified": {
+      "default": false,
+      "title": "No Text Verified",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "source_sha256",
+    "width",
+    "height",
+    "complete"
+  ],
+  "title": "ImageInventory",
+  "type": "object",
+  "$id": "urn:video-translation:agent/image-inventory:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

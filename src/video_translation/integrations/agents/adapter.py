@@ -20,7 +20,8 @@ from .failure_evidence import safe_failure_evidence
 
 def execution_profile_for(stage, packet, command):
     production_stages = {"observe", "visual_analyze", "clean", "translate", "plan",
-                         "audio_voice", "typography", "visual", "audio", "review", "imagegen"}
+                         "audio_voice", "typography", "visual", "audio", "review", "imagegen",
+                         "analyze_images", "background_review", "translate_images", "compose_images", "image_review"}
     return ("work" if stage in production_stages
             and packet.get("inputs", {}).get("agent_role") == "work"
             and any(Path(x).name == "codex_bridge.py" for x in command) else "structured")

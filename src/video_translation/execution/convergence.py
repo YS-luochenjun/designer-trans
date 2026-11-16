@@ -52,7 +52,7 @@ def yield_assignment(controller, state, summary, incident):
     from .clean_progress import progress
     source_id = outcome["source_id"]
     previous = deepcopy(state.get("deferred", {}).get(source_id))
-    reason = "Assignment allowance exhausted; retain unresolved intervals for a different finite Route check"
+    reason = "Applied assignment has unresolved evidence; Route reviews another method or scope"
     state.setdefault("deferred", {})[source_id] = {
         "turn": state["turn"], "reason": reason, "intervals_ms": outcome["intervals_ms"],
         "previous_obstacles": [previous] if previous else [],
@@ -108,39 +108,25 @@ def guard(controller, state, summary):
     checkpoint = checkpoints.setdefault(key, {**inputs, "start_turn": state["turn"], "actions": 0})
     checkpoint["actions"] = state["turn"] - checkpoint["start_turn"]
     profile = ExecutionProfile.model_validate(controller.task.get("execution_snapshot", {}))
-    # Let the existing finite Route frontier select another untried assignment.
-    deferred_ready = (summary.get("all_deferred") and not state.get("candidate")
-                      and state.get("pending_turn") is None
-                      and not controller.node.get("external_pending"))
     if checkpoint["actions"] < profile.max_unchanged_actions:
-        return
-    from .review_draft import complete_candidate
-    from video_translation.domain.limits import testing_unlimited
-    if testing_unlimited(controller.task) or complete_candidate(controller.task):
-        from .clean_supervision import request
-        request(controller, state, "progress_review",
-                "The base is unchanged; Route must assess useful next work or a complete viewing candidate",
-                basis={"checkpoint": key})
         return
     incident = state.setdefault("execution_incidents", {}).setdefault(key, {
         "id": key, "kind": "no_base_progress", **inputs, "node_id": controller.node["id"],
         "first_turn": checkpoint["start_turn"], "last_turn": state["turn"],
-        "actions": checkpoint["actions"], "status": "needs_new_evidence_or_capability",
+        "actions": checkpoint["actions"], "status": "progress_review",
         "unresolved_source_ids": [r["source_id"] for r in summary["remaining"]],
-        "candidate_id": (state.get("candidate") or {}).get("id"),
-        "quality_passed": False,
-        "rework": {"stage": "clean", "mode": "proposal", "expected_base_sha256": inputs["base_sha256"],
-                   "preserve_accepted": True, "preserve_unknown": True,
-                   "invalidates_downstream": ["typography", "visual", "compose", "review"],
-                   "requires": "New bound evidence/capability and explicit application decision"},
+        "candidate_id": (state.get("candidate") or {}).get("id"), "quality_passed": False,
+        "rework": {"stage": "clean", "mode": "proposal",
+                   "expected_base_sha256": inputs["base_sha256"],
+                   "preserve_accepted": True, "preserve_unknown": True},
     })
+    # Applied unresolved outcomes may return to Route; a count alone never stops Work.
     if yield_assignment(controller, state, summary, incident):
         return
-    if deferred_ready:
-        return
-    state["routing_stop"] = {"incident_id": incident["id"], "reason": ERROR}
-    controller.store.put("production_session", state)
-    raise CapabilityUnavailable(state["routing_stop"]["reason"])
+    from .clean_supervision import request
+    request(controller, state, "progress_review",
+            "The base is unchanged; Route reviews evidence, changes method or assigns another scope",
+            basis={"checkpoint": key})
 
 
 def operative_action(value):

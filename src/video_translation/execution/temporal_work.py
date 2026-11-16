@@ -5,7 +5,7 @@ import math
 from fractions import Fraction
 
 from video_translation.domain.execution import identity
-from video_translation.domain.limits import budget_policy, testing_unlimited
+from video_translation.domain.limits import budget_policy
 from .frame_clock import frame_window, request_time
 
 
@@ -63,14 +63,14 @@ def temporal_work_orders(controller, state):
                 "total_compute_windows": window_count,
                 "resource_limits": ({**budget, **dict.fromkeys((
                     "max_external_calls", "max_recovery_calls", "max_clean_turns"))}
-                    if budget and testing_unlimited(controller.task) else budget),
+                    if budget else budget),
                 "budget_policy": budget_policy(controller.task),
                 "quality_policy": "Existing clean quality and current-base review remain mandatory.",
                 "grouping": "One unresolved continuous source interval; never merge gaps or different sources.",
                 "execution": "Use existing interval tools; windows are compute bounds, not separate Agent calls.",
                 "stops": ["scene cut, changed occlusion or mask requires verified subdivision",
                           "unknown result, user pause/cancel, storage protection or changed base stops new work",
-                          "numeric allowances apply only when budget_policy.usage_quotas_enforced is true",
+                          "action counts trigger Route review; explicit spending allowances remain effective",
                           "window success cannot approve unprocessed frames or the whole plate"],
                 "authorization_source": "Current Route work order and task executor ledger",
                 "automatic_acceptance": False,

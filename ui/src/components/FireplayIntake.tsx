@@ -2,18 +2,21 @@ import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { api } from "../lib/api";
 import type { Asset, Task } from "../lib/types";
+import type { TaskKind } from "../lib/taskKinds";
 import { ErrorBox } from "./common";
 import { initialIntakeOptions, intakeLocales, intakePayload, IntakeFiles, TranslationIntakeFields } from "./TranslationIntakeFields";
 
 const sourceKindLabels: Record<string, string> = {
   library_video: "Fireplay素材库原视频",
   reference_video: "视频直链",
+  reference_image: "图片直链",
   youtube: "YouTube引用",
   unsupported: "其他引用",
 };
 
 interface FireplayPreview {
   preview_id: string;
+  task_kind: Exclude<TaskKind, "face_swap">;
   requirement: {
     id: string;
     code: string;
@@ -30,6 +33,7 @@ interface FireplayPreview {
 }
 
 type CreatePayload = ReturnType<typeof intakePayload> & {
+  task_kind: Exclude<TaskKind, "face_swap">;
   preview_id: string;
   source_ids: string[];
   asset_ids: string[];
@@ -64,6 +68,8 @@ export function FireplayIntake({ onClose, onCreated, onBusyChange, managed = fal
   const submittedPayload = useRef<CreatePayload | null>(null);
   const uploaded = useRef(new Map<File, string>());
   const busy = previewing || creating;
+  const image = preview?.task_kind === "image_translation";
+  const sourceLabel = image ? "原图" : "原片";
 
   const invalidatePreview = () => {
     revision.current += 1;
@@ -135,12 +141,12 @@ export function FireplayIntake({ onClose, onCreated, onBusyChange, managed = fal
     const fields = intakePayload(options);
     if (active.requirement.locales.length) fields.target_locales = [...new Set(active.requirement.locales)];
     if (selectedIds.length && !confirmSources) {
-      setError("请确认所选需求引用就是本次待翻译原片");
+      setError(`请确认所选需求引用就是本次待翻译${sourceLabel}`);
       return;
     }
     if (!fields.title || !fields.target_locales.length || (!selectedIds.length && !files.length)) {
       setError(!fields.title ? "请填写任务名称" : !fields.target_locales.length
-        ? "需求未提供目标语言，请补充后再创建" : "请勾选可下载原片，或补传本地视频");
+        ? "需求未提供目标语言，请补充后再创建" : `请勾选可下载${sourceLabel}，或补传本地${image ? "图片" : "视频"}`);
       return;
     }
     if (managed && (!options.confirmBrief || [options.calls, options.imageCalls, options.videoCredits].some(v => v === null))) {
@@ -160,13 +166,14 @@ export function FireplayIntake({ onClose, onCreated, onBusyChange, managed = fal
           if (!id) {
             const body = new FormData();
             body.append("file", file);
-            id = (await api<Asset>("/assets", { method: "POST", body })).id;
+            id = (await api<Asset>(image ? "/assets?kind=image" : "/assets?kind=video", { method: "POST", body })).id;
             uploaded.current.set(file, id);
           }
           assetIds.push(id);
         }
         submittedPayload.current = {
           ...fields,
+          task_kind: active.task_kind ?? "video_translation",
           preview_id: active.preview_id,
           source_ids: selectedIds,
           asset_ids: assetIds,
@@ -210,6 +217,7 @@ export function FireplayIntake({ onClose, onCreated, onBusyChange, managed = fal
     </form>
     {preview && <form onSubmit={submit} className="form-stack intake-create-form" aria-busy={creating}>
       <section className="intake-requirement" aria-label="需求预览">
+        <strong className="intake-kind-result">{image ? "图片翻译" : "视频翻译"} · 已根据需求选择</strong>
         <span className="intake-code">{preview.requirement.code || preview.requirement.id}</span>
         <h3>{preview.requirement.title || "需求未填写标题"}</h3>
         <h4>需求要求</h4>
@@ -223,8 +231,8 @@ export function FireplayIntake({ onClose, onCreated, onBusyChange, managed = fal
         <ul>{preview.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
       </div>}
       <fieldset className="intake-sources" disabled={busy || submitted}>
-        <legend>待翻译原片候选</legend>
-        {!preview.sources.length && <p>需求中未找到可用的视频引用，请补传本地原片。</p>}
+        <legend>待翻译{sourceLabel}候选</legend>
+        {!preview.sources.length && <p>需求中未找到可用的{image ? "图片" : "视频"}引用，请补传本地{sourceLabel}。</p>}
         {preview.sources.map((source) => <label className="intake-source" key={source.id}>
           <input type="checkbox" checked={sourceIds.includes(source.id)} disabled={!source.downloadable}
             onChange={(event) => {
@@ -239,15 +247,17 @@ export function FireplayIntake({ onClose, onCreated, onBusyChange, managed = fal
       {sourceIds.length > 0 && <label className="intake-source intake-source-confirm">
         <input type="checkbox" checked={confirmSources} disabled={busy || submitted}
           onChange={(event) => setConfirmSources(event.target.checked)} />
-        <span>我确认所选需求引用就是本次待翻译原片</span>
+        <span>我确认所选需求引用就是本次待翻译{sourceLabel}</span>
       </label>}
       {(preview.needs_source_upload || !sourceIds.length) && <p className="intake-hint" role="status">
-        请补传可用的本地原片；创建前至少需要一个已选原片或补传视频。
+        请补传可用的本地{sourceLabel}；创建前至少需要一个已选{sourceLabel}或补传素材。
       </p>}
-      <IntakeFiles key={previewRevision} files={files} onChange={setFiles} busy={busy || submitted} supplemental />
+      <IntakeFiles key={previewRevision} files={files} onChange={setFiles} busy={busy || submitted} supplemental
+        {...(image ? { accept: ".png,.jpg,.jpeg,.webp,.bmp", label: "补传本地原图",
+          hint: "PNG、JPEG、WebP、BMP · 保留来源图片集合" } : {})} />
       {!intakeLocales(options.languages).length && <p className="intake-hint">缺少目标语言，请填写后再创建。</p>}
       <TranslationIntakeFields value={options} onChange={setOptions} busy={busy || submitted}
-        requireTitle lockLanguages={preview.requirement.locales.length > 0} />
+        requireTitle image={image} lockLanguages={preview.requirement.locales.length > 0} />
       {managed && <label>KIE 累计额度上限
         <input type="number" aria-label="KIE 累计额度上限" min={0} step="0.01" required
           value={kieLimit} disabled={busy || submitted} onChange={e => setKieLimit(Number(e.target.value))} />

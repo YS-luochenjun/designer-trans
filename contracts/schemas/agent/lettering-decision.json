@@ -203,6 +203,20 @@
       "title": "Times Ms",
       "type": "array"
     },
+    "inspection_focus": {
+      "default": "general",
+      "enum": [
+        "general",
+        "entry_exit",
+        "motion",
+        "occlusion",
+        "style_layout",
+        "cleanup",
+        "temporal_continuity"
+      ],
+      "title": "Inspection Focus",
+      "type": "string"
+    },
     "revisions": {
       "items": {
         "$ref": "#/$defs/LetteringPlan"

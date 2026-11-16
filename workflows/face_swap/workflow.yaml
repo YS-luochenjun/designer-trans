@@ -1,0 +1,6 @@
+id: face_swap
+version: 2.0.0
+execution: external_tool
+executor: facefusion
+display_steps: [确认目标人物与参数, FaceFusion 处理完整视频, 查看结果与下载]
+nodes: []

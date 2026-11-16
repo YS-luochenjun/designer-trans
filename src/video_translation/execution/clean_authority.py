@@ -1,6 +1,6 @@
 """Executable assignment scopes, separate from tool availability and media approval."""
 
-LOCAL_REPAIRS = ("flat", "donor", "local_surface", "tracked_donor", "reference_plate")
+LOCAL_REPAIRS = ("flat", "donor", "local_surface", "tracked_donor", "reference_plate", "registered_patch")
 PAID_REPAIRS = ("image_edit", "wan")
 
 

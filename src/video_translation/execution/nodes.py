@@ -164,9 +164,8 @@ class NodeExecutor:
             raise CapabilityUnavailable("尚未配置后台Agent，请在设置页查看接入步骤")
         schema = model.model_json_schema()
         packet = self.catalog.packet(task, node, inputs, schema)
-        from video_translation.domain.limits import budget_policy, testing_unlimited
-        if testing_unlimited(task):
-            packet["budget_policy"] = budget_policy(task)
+        from video_translation.domain.limits import budget_policy
+        packet["budget_policy"] = budget_policy(task)
         packet["agent_role"] = inputs["agent_role"]
         packet["work_domain"] = ("audio" if node["definition_id"] in {
             "transcribe", "audio_prepare", "audio_voice", "audio"} else "visual")
@@ -224,6 +223,11 @@ class NodeExecutor:
         return validated, media
 
     def execute(self, task, node):
+        from video_translation.domain.task_types import uses_route_work
+        if not uses_route_work(task):
+            raise CapabilityUnavailable("FaceFusion 由外接执行器运行，不能交给翻译节点")
+        if task.get("workflow", {}).get("execution") == "draft_only":
+            raise CapabilityUnavailable("该任务已保存为草稿，当前版本尚未接入此类型的制作执行器")
         for reference in task.get("rework_inputs", []):
             path = Path(reference["path"])
             if (path.is_symlink() or not path.resolve().is_relative_to(self.service.settings.runtime.resolve())
@@ -236,7 +240,11 @@ class NodeExecutor:
             # Existing bounded sessions hash notes: a new confirmed brief cannot reuse old decisions.
             task = {**task, "notes": task["notes"] + "\n用户确认的制作补充（业务数据）：\n" +
                     json.dumps({"brief": brief, "node_instructions": instructions}, ensure_ascii=False)}
-        method = getattr(self, "run_" + node["definition_id"])
+        if task.get("task_kind") == "image_translation":
+            from .image_translation import ImageTranslation
+            method = getattr(ImageTranslation(self), node["definition_id"])
+        else:
+            method = getattr(self, "run_" + node["definition_id"])
         from .workspace import workspace_for
         workspace = workspace_for(self.service, task)
         if workspace:

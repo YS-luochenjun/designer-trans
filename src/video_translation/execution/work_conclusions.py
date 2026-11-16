@@ -31,9 +31,8 @@ def retain(state, action, *, turn, base_sha256, frames, role="work", tool_error=
 
 
 def capacity(task):
-    from video_translation.domain.limits import testing_unlimited
-    budget = task.get("execution_snapshot", {}).get("resource_budget") or {}
-    limit = None if testing_unlimited(task) else budget.get("max_external_calls")
+    from video_translation.domain.limits import effective_limit
+    limit = effective_limit(task, "max_paid_calls", None)
     remaining = max(0, limit - task.get("paid_calls", 0)) if limit is not None else None
     model_stages = {"observe", "visual_analyze", "translate", "plan", "visual", "review"}
     reserve = sum(n.get("definition_id") in model_stages
@@ -41,6 +40,26 @@ def capacity(task):
                   for n in task.get("nodes", []))
     return {"remaining_external_calls": remaining, "downstream_model_call_reserve": reserve,
             "meaning": "Planning estimate, not extra allowance; media/image/audio requests also use the ledger"}
+
+
+def continuity(state, queue):
+    """Factual working memory, rebuilt from applied outcomes rather than private reasoning."""
+    recent = list(state.get("work_conclusions", {}).values())[-6:]
+    order = state.get("route_work_order") or {}
+    return {
+        "base_sha256": state["base"]["sha256"], "turn": state["turn"],
+        "current_assignment": {k: order.get(k) for k in (
+            "source_id", "method", "question", "execution_scope", "allowed_repair_methods")},
+        "remaining_scopes": [{k: row.get(k) for k in (
+            "source_id", "remaining_intervals_ms", "actionable_intervals_ms", "obstacles")}
+            for row in queue.get("remaining", [])[:24]],
+        "last_applied_outcomes": recent,
+        "next_step": "Review the pending candidate first" if state.get("candidate") else
+                     "Use observed outcomes to choose useful work in the current assignment",
+        "keep": ["accepted pixels", "original requests and costs", "scope and quality evidence"],
+        "do_not_repeat": "An identical bound failed recipe; reconcile unknown requests before new dispatch.",
+        "quality_acceptance": False,
+    }
 
 
 def preserve_output_reserve(controller, state):

@@ -48,10 +48,14 @@ def pending_request(service, task):
 def execute_request(executor, task, record, *, agent=None):
     service = executor.service
     if not record.get("_recover_saved_result"):
+        from video_translation.application.tasks import Conflict
+        from video_translation.domain.limits import allows_new_call
         from .resource_budget import guard_external_call, guard_storage
         current = service.store.require("task", task["id"])
         guard_external_call(current)
         guard_storage(service, current)
+        if not allows_new_call(current, "max_paid_calls", current.get("paid_calls", 0)):
+            raise Conflict("Task spending call allowance exhausted before native image claim")
     root = (service.settings.runtime / "tasks" / task["id"]).resolve()
     directory = root / "imagegen-assets" / record["id"]
     directory.mkdir(parents=True, exist_ok=True)

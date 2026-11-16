@@ -45,8 +45,11 @@ def route_deferred(controller, state, queue):
     if candidate:
         identity_inputs["candidate_id"] = candidate["id"]
     feedback = queue.get("work_feedback", [])
-    if feedback:
-        identity_inputs["work_feedback"] = sorted(r["id"] for r in feedback)
+    reports = [r["id"] for r in state.get("work_feedback", {}).values()
+               if r["base_sha256"] == state["base"]["sha256"]]
+    if reports:
+        # Acknowledging a report is not new evidence for another paid Route decision.
+        identity_inputs["work_feedback"] = sorted(reports)
     from .work_autonomy import enabled
     from .work_conclusions import capacity, retain
     if enabled(controller.task):

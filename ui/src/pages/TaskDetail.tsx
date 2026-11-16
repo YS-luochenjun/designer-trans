@@ -3,6 +3,7 @@ import { ArrowLeft, Check, Download, RotateCcw, Square, X } from "lucide-react";
 import { api, useData } from "../lib/api";
 import type { Artifact, Task, Question } from "../lib/types";
 import { time } from "../lib/types";
+import { workflowLabel } from "../lib/workflowLabel";
 import {
   ErrorBox,
   JsonView,
@@ -17,11 +18,13 @@ import { TaskDeletion, readPendingDeletion } from "../components/TaskDeletion";
 import type { PendingDeletion } from "../components/TaskDeletion";
 import { NodeConversation } from "../components/NodeConversation";
 import { RouteReport } from "../components/RouteReport";
+import { RouteCoordination } from "../components/RouteCoordination";
 import { NodeOverview } from "../components/NodeOverview";
 import { LocalPreview } from "../components/LocalPreview";
 import { CleanPlate } from "../components/CleanPlate";
 import { TaskCallRecords } from "../components/TaskCallRecords";
 import { TaskManagementContext } from "../components/ManagementRecords";
+import { DesignWorkspace } from "../components/DesignWorkspace";
 
 function Media({ artifact }: { artifact: Artifact }) {
   return (
@@ -53,6 +56,7 @@ function QuestionCard({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [reviewIssues, setReviewIssues] = useState<string[]>([]);
+  const image = question.context.media_kind === "image";
   const send = async (value: string) => {
     setBusy(true);
     setError("");
@@ -81,11 +85,13 @@ function QuestionCard({
       {question.kind === "review" ? (
         <>
           <p className="muted">
-            请完整观看原片与候选后再批准。批准仅适用于当前成片版本。
+            {image ? "请对照原图完整检查当前图片后再批准。批准仅适用于当前图片版本。" :
+              "请完整观看原片与候选后再批准。批准仅适用于当前成片版本。"}
           </p>
           <label>
             哪些地方需要返工（可多选）
-            <div className="actions">{["清底仍有原文", "译文不准确", "字号或动效不合适", "声音有问题"].map(issue =>
+            <div className="actions">{(image ? ["清底仍有原文", "译文不准确", "字形或布局不合适", "主体或保护区损伤"] :
+              ["清底仍有原文", "译文不准确", "字号或动效不合适", "声音有问题"]).map(issue =>
               <button key={issue} type="button" className="secondary" aria-pressed={reviewIssues.includes(issue)}
                 onClick={() => setReviewIssues(current => current.includes(issue)
                   ? current.filter(x => x !== issue) : [...current, issue])}>{issue}</button>)}</div>
@@ -96,7 +102,8 @@ function QuestionCard({
               value={answer}
               onChange={(event) => setAnswer(event.target.value)}
               maxLength={4000}
-              placeholder="可补充时间点。提交不通过后，Route 会在原额度内安排返工。"
+              placeholder={image ? "可补充具体文字或区域。提交不通过后，Route 会安排返工。" :
+                "可补充时间点。提交不通过后，Route 会安排返工。"}
             />
           </label>
           <div className="actions">
@@ -198,6 +205,8 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const nodes = task.nodes ?? [],
     node = nodes.find((n) => n.id === selected),
     questions = (task.questions ?? []).filter((q) => q.status === "open");
+  const faceSwap = task.task_kind === "face_swap";
+  const image = task.task_kind === "image_translation";
   return (
     <>
       <button className="back-link" onClick={onBack}>
@@ -210,7 +219,7 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
         action={
           <>
             <Status value={task.status} />
-      {!["cancelled", "completed"].includes(task.status) && <>
+      {task.execution_readiness !== "draft_only" && !["cancelled", "completed"].includes(task.status) && <>
         {task.control_paused && <span role="status">制作已暂停{nodes.some(n => n.status === "running") ? "，等待当前步骤结束" : ""}</span>}
         <button className="secondary" disabled={busy} onClick={async () => {
           setBusy(true); setActionError("");
@@ -219,7 +228,7 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
           finally { setBusy(false); }
         }}>{task.control_paused ? "继续制作" : "暂停制作"}</button>
       </>}
-            {["blocked", "interrupted", "partial_completed"].includes(
+            {!faceSwap && ["blocked", "interrupted", "partial_completed"].includes(
               task.status,
             ) && (
               <button
@@ -238,7 +247,7 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
                 onClick={() => void action("cancel")}
               >
                 <Square size={14} />
-                停止任务
+                {task.execution_readiness === "draft_only" ? "取消草稿" : "停止任务"}
               </button>
             )}
             <button className="secondary danger" disabled={!!pendingDeletion && pendingDeletion.task.id !== id}
@@ -248,18 +257,12 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
         }
       />
       <ErrorBox message={error || actionError} />
-      {task.execution_snapshot?.budget_mode === "testing_unlimited" &&
+      {!faceSwap && task.execution_snapshot?.budget_mode === "testing_unlimited" &&
         <p className="muted" role="status">测试模式：调用、清底动作与返工不设额度上限，消耗持续记录。</p>}
-      <RouteReport report={task.route_report} />
+      {!faceSwap && <RouteReport report={task.route_report} />}
       <TaskManagementContext taskId={id} />
-      {Boolean(task.task_route_events?.some(event => ["queued", "running", "planned", "blocked"].includes(event.status))) &&
-        <details className="task-drawer"><summary>Route 协调记录</summary>
-          {task.task_route_events?.slice(-8).map(event => <p key={event.id}>
-            {event.status === "applied" ? "已安排返工" : event.status === "blocked" ? "需要解决阻塞" :
-              event.status === "running" ? "正在协调" : event.status === "acknowledged" ? "已收到 Work 报备" : "等待协调"}
-            {event.reason || event.plan?.reason ? ` · ${event.reason || event.plan?.reason}` : ""}
-          </p>)}
-        </details>}
+      {!faceSwap && <RouteCoordination events={task.task_route_events} />}
+      <DesignWorkspace task={task} onNode={setSelected} refresh={reload} />
 
       {questions.length > 0 && <a className="review-shortcut" href="#task-review"
         onClick={(event) => {
@@ -268,7 +271,7 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
           panel.open = true;
           panel.scrollIntoView({ behavior: "smooth", block: "start" });
         }}>{questions.length} 项待确认 · 查看候选与审核</a>}
-      {(
+      {!faceSwap && (
         <>
           <div className="flow-layout workflow-layout">
             <WorkflowGraph
@@ -280,9 +283,9 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
               onSelect={setSelected}
             />
             {node && (
-              <aside className="node-detail" ref={detailPanel} tabIndex={-1} aria-label={`${node.label}详情`}>
+              <aside className="node-detail" ref={detailPanel} tabIndex={-1} aria-label={`${workflowLabel(node.label)}详情`}>
                 <div className="panel-heading">
-                  <h2>{node.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")}</h2>
+                  <h2>{workflowLabel(node.label)}</h2>
                   <button
                     className="icon-button"
                     aria-label="关闭节点详情"
@@ -291,7 +294,8 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
                     <X size={18} />
                   </button>
                 </div>
-                <NodeConversation key={node.id} task={task} node={node} refresh={reload} />
+                {task.execution_readiness !== "draft_only" &&
+                  <NodeConversation key={node.id} task={task} node={node} refresh={reload} />}
                 <RouteReport report={node.route_report} />
                 <NodeOverview task={task} node={node} onShowCalls={() => showRecords("calls", node.id)}
                   notice={node.error && <details><summary>Work 与程序的原始诊断</summary>
@@ -307,7 +311,7 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   sessions={task.production_sessions} onShowProcess={() => showRecords("process", node.id)} />
                 <details className="node-metadata"><summary>调试信息</summary><div className="node-detail-content"><dl>
                   <dt>前置步骤</dt>
-                  <dd>{node.depends_on.map((dependency) => nodes.find((item) => item.id === dependency)?.label ?? dependency).join("、") || "无"}</dd>
+                  <dd>{node.depends_on.map((dependency) => workflowLabel(nodes.find((item) => item.id === dependency)?.label ?? dependency)).join("、") || "无"}</dd>
                   <dt>语言</dt>
                   <dd>{node.locale ?? "原片共享"}</dd>
                   <dt>尝试</dt>
@@ -333,34 +337,38 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
         </>
       )}
-      <details className="task-drawer" id="task-review">
-        <summary>原片与成品 {questions.length > 0 && <span className="status">{questions.length} 项待审核</span>}</summary>
+      {!faceSwap && <details className="task-drawer" id="task-review">
+        <summary>{image ? "原图与成品" : "原片与成品"} {questions.length > 0 && <span className="status">{questions.length} 项待审核</span>}</summary>
         <div className="task-drawer-body">
           {task.production_policy?.mode === "completion_first" && <section className="evidence-card">
             <strong>旧接续路线已停止使用 · 先完成无字底片</strong>
             <p>原文尚未清理完成时不继续叠加译文。历史草稿保留用于定位问题，不作为合格结果。</p>
           </section>}
-          <ProductionSummary task={task} />
-          <CleanPlate task={task} />
-          <LocalPreview task={task} refresh={reload} />
+          {(task.task_kind ?? "video_translation") === "video_translation" && <>
+            <ProductionSummary task={task} />
+            <CleanPlate task={task} />
+            <LocalPreview task={task} refresh={reload} />
+          </>}
           <div className="preview-grid">
             {(task.assets ?? []).map((a) => (
               <article key={a.id}>
                 <div className="eyebrow">原片</div>
-                <video controls src={a.content_url} preload="metadata" />
+                {a.kind === "image" || a.kind === "face_source"
+                  ? <img src={a.content_url} alt={a.name} loading="lazy" />
+                  : <video controls src={a.content_url} preload="metadata" />}
                 <h3>{a.name}</h3>
               </article>
             ))}
             {(task.artifacts ?? [])
               .filter(
                 (a) =>
-                  a.kind === "video" &&
+                  (a.kind === "video" || image && a.kind === "image") &&
                   ((a.name.startsWith("未验收草稿") && !(task.artifacts ?? []).some(other =>
                     other.name.startsWith("未验收草稿") && other.node_id === a.node_id &&
                     (other.created_at ?? "") > (a.created_at ?? ""))) || nodes.some(
                     (n) =>
                       n.id === a.node_id &&
-                      n.definition_id === "compose" &&
+                      (n.definition_id === "compose" || n.definition_id === "compose_images") &&
                       n.output.artifact_id === a.id,
                   )),
               )
@@ -390,9 +398,9 @@ export function TaskDetail({ id, onBack }: { id: string; onBack: () => void }) {
             </div>
           ))}
         </div>
-      </details>
-      <TaskCallRecords task={task} nodeId={callNode} onNodeChange={setCallNode} />
-      <ProductionProcess task={task} nodeId={processNode} onNodeChange={setProcessNode} />
+      </details>}
+      {!faceSwap && <TaskCallRecords task={task} nodeId={callNode} onNodeChange={setCallNode} />}
+      {!faceSwap && <ProductionProcess task={task} nodeId={processNode} onNodeChange={setProcessNode} />}
       {deleting && <TaskDeletion task={task} pending={pendingDeletion?.task.id === id ? pendingDeletion : null}
         onPending={setPendingDeletion}
         onDeleted={() => { setDeleting(false); setPendingDeletion(null); onBack(); }}

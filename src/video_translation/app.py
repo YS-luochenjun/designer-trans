@@ -63,6 +63,10 @@ def create_app(settings: Settings | None = None, executor_factory=None):
     app = FastAPI(title="视频翻译 v2", version="0.1.0", lifespan=lifespan)
     app.state.service, app.state.worker, app.state.scheduler = service, worker, scheduler
     app.state.manager = manager
+    from video_translation.interfaces.facefusion_api import facefusion_routes
+    app.include_router(facefusion_routes(service, worker))
+    from video_translation.interfaces.project_metrics_api import project_metrics_routes
+    app.include_router(project_metrics_routes(store))
     from video_translation.interfaces.management_api import management_routes
     app.include_router(management_routes(manager, worker))
     from video_translation.interfaces.requirements_api import requirement_routes
@@ -150,6 +154,7 @@ def create_app(settings: Settings | None = None, executor_factory=None):
     @app.get("/api/health")
     def health():
         import os
+        from media_capabilities.catalogs import catalog_info
         from video_translation.domain.execution import EXECUTION_VERSION
         return {
             "status": "ok" if not worker.last_error else "degraded",
@@ -176,11 +181,30 @@ def create_app(settings: Settings | None = None, executor_factory=None):
             "clean_stop_scope_protocol_version": "1",
             "testing_budget_policy_protocol_version": "1",
             "clean_check_recovery_protocol_version": "1",
+            "stale_clean_decision_recovery_protocol_version": "1",
+            "route_autonomy_continuation_protocol_version": "1",
+            "action_review_policy_protocol_version": "1",
+            "native_candidate_registration_protocol_version": "1",
+            "designer_workbench_protocol_version": "1",
+            "task_execution_ownership_protocol_version": "1",
+            "facefusion_executor_protocol_version": "1",
+            "translation_intake_protocol_version": "2",
             "parallel_work_protocol_version": "1",
             "max_concurrent_nodes": settings.max_concurrent_nodes,
             "clean_work_protocol_version": "2",
             "clean_route_recovery_protocol_version": "2",
             "materialization_audio_protocol_version": "1",
+            "sparse_window_clip_protocol_version": "1",
+            "workspace_storage_policy_protocol_version": "1",
+            "storage_continuation_protocol_version": "1",
+            "clean_design_continuation_protocol_version": "1",
+            "source_design_readiness_protocol_version": "1",
+            "visual_review_checkpoint_protocol_version": "1",
+            "shared_font_catalog_protocol_version": "1",
+            "shared_media_capabilities_protocol_version": "1",
+            "clean_design_rework_protocol_version": "1",
+            "clean_quality_rework_protocol_version": "1",
+            "shared_catalogs": {name: catalog_info(name) for name in ("locales", "fonts")},
             "materialization_recovery_lifecycle_version": "3",
             "task_deletion_policy_version": "2",
             "fireplay_renewal_protocol_version": "1",
@@ -207,7 +231,7 @@ def create_app(settings: Settings | None = None, executor_factory=None):
         }
 
     @app.post("/api/assets", status_code=201)
-    async def upload(file: UploadFile):
+    async def upload(file: UploadFile, kind: str = "auto"):
         temporary = settings.runtime / "uploads" / identifier()
         size = 0
         try:
@@ -215,11 +239,11 @@ def create_app(settings: Settings | None = None, executor_factory=None):
                 while chunk := await file.read(1024 * 1024):
                     size += len(chunk)
                     if size > settings.max_upload_bytes:
-                        raise HTTPException(413, "视频超过上传大小限制")
+                        raise HTTPException(413, "素材超过上传大小限制")
                     target.write(chunk)
             if not size:
                 raise ValueError("上传文件为空")
-            return service.register_asset(temporary, file.filename or "video.mp4")
+            return service.register_asset(temporary, file.filename or "video.mp4", kind)
         finally:
             temporary.unlink(missing_ok=True)
             await file.close()
@@ -242,18 +266,29 @@ def create_app(settings: Settings | None = None, executor_factory=None):
         return update_selection(settings.root, body)
 
     @app.get("/api/tasks")
-    def tasks(q: str = "", status: str | None = None, limit: int = 50, offset: int = 0):
+    def tasks(q: str = "", status: str | None = None, limit: int = 50, offset: int = 0,
+              task_kind: str | None = None):
         if not 1 <= limit <= 200 or offset < 0:
             raise ValueError("分页参数无效")
+        from video_translation.domain.models import TaskKind
+        if task_kind and task_kind not in {kind.value for kind in TaskKind}:
+            raise ValueError("未知任务类型")
         records = [
             t
             for t in store.list("task")
-            if (not status or t["status"] == status) and q.casefold() in (t["title"] + t["id"]).casefold()
+            if (not status or t["status"] == status)
+            and (not task_kind or t.get("task_kind", "video_translation") == task_kind)
+            and q.casefold() in (t["title"] + t["id"]).casefold()
         ]
         return {
             "items": [service.summary(t) for t in records[offset : offset + limit]],
             "total": len(records),
         }
+
+    @app.get("/api/task-kinds")
+    def task_kinds():
+        from video_translation.application.design_tasks import KINDS
+        return {"items": KINDS, "version": "1"}
 
     @app.post("/api/tasks", status_code=201)
     def create_task(body: TaskCreate):

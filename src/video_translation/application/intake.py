@@ -12,8 +12,10 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from .requirements import RequirementService
-from .tasks import Conflict, TaskService
+from .tasks import Conflict, TaskService, asset_kind
 from ..domain.models import Contract, TaskCreate
+from media_capabilities.locales import normalize_locales
+from ..domain.requirement_kind import translation_kind
 from ..execution.media import MediaError, MediaTools
 from ..integrations.fireplay.bridge import requirement_payload
 from ..integrations.fireplay.sources import SourceFetcher, sources_from_brief
@@ -34,6 +36,8 @@ class IntakeCreate(TaskCreate):
 
     @model_validator(mode="after")
     def selected_sources(self):
+        if self.task_kind == "face_swap":
+            raise ValueError("视频换脸请上传本地素材并配置FaceFusion，暂不读取需求面板")
         if not self.asset_ids and not self.source_ids:
             raise ValueError("请选择需求引用的原视频，或补传本地原片")
         if len(self.asset_ids) + len(self.source_ids) > 20 or len(set(self.source_ids)) != len(self.source_ids):
@@ -57,8 +61,13 @@ def safe_brief(brief):
         if mode is not None and (not isinstance(mode, str) or not re.fullmatch(r"[a-z][a-z0-9_]{0,47}", mode)):
             raise ValueError("需求AI承接交付字段格式无效")
         value["aiMode"] = mode
-    if value["assetType"] != "video":
-        raise ValueError("该需求不是视频需求")
+    if value["assetType"] != "video" and not (
+        value["assetType"] == "image" and value.get("aiMode") == "image_translate_or_resize"
+    ):
+        raise ValueError("该需求不是视频或已标注图片翻译的需求")
+    expected = {"video_translate": "video", "image_translate_or_resize": "image"}.get(value.get("aiMode"))
+    if expected and value["assetType"] != expected:
+        raise ValueError("AI承接交付方式与需求素材类型不一致")
     value["id"] = str(UUID(str(value["id"])))
     if not isinstance(value["code"], str) or not re.fullmatch(r"[A-Za-z0-9._-]{1,128}", value["code"]):
         raise ValueError("需求编号无效")
@@ -66,11 +75,11 @@ def safe_brief(brief):
         if value[key] is not None and (not isinstance(value[key], str) or len(value[key]) > 32000):
             raise ValueError("需求文本字段格式无效或过长")
     locales = value["locales"] or []
-    if not isinstance(locales, list) or len(locales) > 12 or any(
-        not isinstance(v, str) or not re.fullmatch(r"[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*", v) for v in locales
-    ):
+    if not isinstance(locales, list) or len(locales) > 12:
         raise ValueError("需求语言无法映射为规范语言标签，请先在平台核对")
-    value["locales"] = list(dict.fromkeys(locales))
+    value["locales"] = normalize_locales(locales)
+    if value["locales"] != list(dict.fromkeys(locales)):
+        value["locale_labels"] = locales
     return value
 
 
@@ -96,7 +105,7 @@ class IntakeService:
         except ValueError:
             matches, cursors = {}, set()
             arguments = {"scope": self.fireplay.settings.fireplay_scope, "view": "summary",
-                         "asset_type": "video", "keyword": reference, "limit": 100, "pagination": "cursor"}
+                         "keyword": reference, "limit": 100, "pagination": "cursor"}
             for _ in range(5):
                 result = requirement_payload(self.fireplay.mcp.requirement_list(arguments))
                 for row in result["items"]:
@@ -112,7 +121,7 @@ class IntakeService:
             else:
                 raise ValueError("需求号匹配超出查询上限，请使用完整 UUID")
             if len(matches) != 1:
-                raise ValueError("未找到唯一的可访问视频需求，请核对完整需求号和权限")
+                raise ValueError("未找到唯一的可访问需求，请核对完整需求号和权限")
             requirement_id = next(iter(matches))
         brief = safe_brief(self.fireplay.brief(requirement_id))
         if brief["id"] != requirement_id:
@@ -127,26 +136,31 @@ class IntakeService:
     def preview(self, reference):
         identity = self._identity()
         brief = self._resolve(reference)
+        kind = translation_kind(brief)
         sources = sources_from_brief(brief)
-        warnings = ["需求文本中的视频引用需要确认是原片；不会读取已交付成片作为输入。"]
-        sources = self._library_sources(sources, warnings)
+        warnings = ["需求引用需要确认是本次来源素材；参考附件不会自动作为制作原件。"]
+        if kind == "video_translation":
+            sources = self._library_sources(sources, warnings)
         if not brief["locales"]:
             warnings.append("该需求未填写目标语言，请补充后创建。")
         if not any(s["downloadable"] for s in sources):
-            warnings.append("没有可直接导入的原片，请补传本地视频。")
+            warnings.append("没有可直接导入的来源素材，请补传本地图片。" if kind == "image_translation"
+                            else "没有可直接导入的原片，请补传本地视频。")
         record = {"id": identifier(), "created_at": now(),
                   "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat(),
                   "identity": identity, "brief": brief, "brief_hash": digest(brief), "sources": sources}
         if identity != self._identity():
             raise Conflict("登录身份发生变化，请重新读取需求")
         self.store.put("intake_preview", record)
-        return {"preview_id": record["id"], "expires_at": record["expires_at"],
+        return {"preview_id": record["id"], "expires_at": record["expires_at"], "task_kind": kind,
                 "requirement": {"id": brief["id"], "code": brief["code"], "title": brief["title"] or brief["code"],
                                 "description": brief["description"] or "", "ref_text": brief["refText"] or "",
-                                "locales": brief["locales"]},
+                                "locales": brief["locales"], "ai_mode": brief.get("aiMode"),
+                                "locale_labels": brief.get("locale_labels", brief["locales"])},
                 "sources": [{k: s[k] for k in ("id", "name", "kind", "downloadable", "reason", "origin_field") if k in s}
                             for s in sources],
-                "suggested_target_locales": brief["locales"], "notes": "",
+                "suggested_target_locales": brief["locales"],
+                "notes": "\n\n".join(value for value in (brief["description"], brief["refText"]) if value),
                 "warnings": warnings, "needs_source_upload": not any(s["downloadable"] for s in sources)}
 
     def _library_sources(self, sources, warnings):
@@ -195,6 +209,12 @@ class IntakeService:
             raise ValueError("原片时长超过当前项目上限")
         return metadata
 
+    def _probe_source(self, path, kind):
+        if kind == "image_translation":
+            from .image_assets import inspect_image
+            return inspect_image(path)
+        return self.probe(path)
+
     def _receipt(self, store, body, payload_hash):
         receipt = store.get("intake_receipt", body.idempotency_key)
         if receipt:
@@ -228,6 +248,7 @@ class IntakeService:
         brief = safe_brief(self.fireplay.brief(preview["brief"]["id"]))
         if digest(brief) != preview["brief_hash"]:
             raise Conflict("平台需求已更新，请重新读取并检查原片和语言")
+        kind = translation_kind(brief)
         if brief["locales"] and set(brief["locales"]) != set(body.target_locales):
             raise Conflict("目标语言必须与需求语言一致")
         by_id = {s["id"]: s for s in preview["sources"]}
@@ -252,12 +273,18 @@ class IntakeService:
         actual_preview = {**preview, "sources": selected}
         for asset_id in body.asset_ids:
             asset = self.store.require("asset", asset_id)
+            if asset_kind(asset) != ("image" if kind == "image_translation" else "video"):
+                raise ValueError("补传素材类型与需求不一致")
             path = self.tasks.checked_path(asset)
             if self.tasks.hash_file(path) != asset["sha256"]:
                 raise Conflict("本地原片内容已变化，请重新上传")
-            self.probe(path)
-        notes = "\n\n".join(v for v in [f"Fireplay需求 {brief['code']}", brief["description"],
-                                          brief["refText"], body.notes.strip()] if v)
+            self._probe_source(path, kind)
+        original_notes = "\n\n".join(value for value in (brief["description"], brief["refText"]) if value)
+        additions = body.notes.strip()
+        if original_notes and additions.startswith(original_notes):
+            additions = additions[len(original_notes):].strip()
+        notes = "\n\n".join(dict.fromkeys(v for v in [f"Fireplay需求 {brief['code']}", brief["description"],
+                                          brief["refText"], additions] if v))
         if len(notes) > 8000:
             raise ValueError("需求说明与补充要求合计超过8000字，请精简后再创建")
         folder = self.tasks.settings.runtime / "uploads"
@@ -277,7 +304,7 @@ class IntakeService:
                 resolved = path.resolve()
                 if not resolved.is_relative_to(destination.resolve()) or not resolved.is_file():
                     raise ValueError("原片下载位置无效")
-                self.probe(resolved)
+                self._probe_source(resolved, kind)
                 downloads.append((source, resolved))
             # Revalidate the brief and identity after downloads, before work can be queued.
             if preview["identity"] != self._identity() or digest(safe_brief(self.fireplay.brief(brief["id"]))) != preview["brief_hash"]:
@@ -305,7 +332,10 @@ class IntakeService:
                             created_paths.append(domain_tasks.checked_path(stored))
                             sources.append({"asset_id": asset["id"], "source_id": source["id"]})
                         request_fields = {k: v for k, v in body.model_dump().items() if k in TaskCreate.model_fields}
-                        request_fields.update(asset_ids=[s["asset_id"] for s in sources], notes=notes)
+                        # The platform delivery mode is authoritative; the UI only
+                        # carries the previewed fields and cannot switch owners.
+                        request_fields.update(task_kind=kind, asset_ids=[s["asset_id"] for s in sources],
+                                              notes=notes)
                         request = TaskCreate(**request_fields)
                         record = requirements.register(brief, sources, request.target_locales)
                         requirements.accept(record["id"])

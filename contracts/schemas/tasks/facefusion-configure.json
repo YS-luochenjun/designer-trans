@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "FaceFusionProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "face_selector_mode": {
+          "default": "reference",
+          "enum": [
+            "reference",
+            "many",
+            "one"
+          ],
+          "title": "Face Selector Mode",
+          "type": "string"
+        },
+        "face_selector_order": {
+          "default": "large-small",
+          "enum": [
+            "left-right",
+            "right-left",
+            "top-bottom",
+            "bottom-top",
+            "small-large",
+            "large-small",
+            "best-worst",
+            "worst-best"
+          ],
+          "title": "Face Selector Order",
+          "type": "string"
+        },
+        "reference_frame_number": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Reference Frame Number",
+          "type": "integer"
+        },
+        "reference_face_position": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Reference Face Position",
+          "type": "integer"
+        },
+        "reference_face_distance": {
+          "default": 0.3,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Reference Face Distance",
+          "type": "number"
+        },
+        "face_mask_types": {
+          "items": {
+            "enum": [
+              "box",
+              "occlusion",
+              "region"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Face Mask Types",
+          "type": "array"
+        },
+        "face_mask_blur": {
+          "default": 0.3,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Face Mask Blur",
+          "type": "number"
+        },
+        "output_video_quality": {
+          "default": 80,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Output Video Quality",
+          "type": "integer"
+        },
+        "target_preview_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{32}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Preview Id"
+        }
+      },
+      "title": "FaceFusionProfile",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "maxLength": 128,
+      "minLength": 16,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "expected_run_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expected Run Id"
+    },
+    "profile": {
+      "$ref": "#/$defs/FaceFusionProfile"
+    }
+  },
+  "required": [
+    "request_id",
+    "profile"
+  ],
+  "title": "FaceFusionConfigure",
+  "type": "object",
+  "$id": "urn:video-translation:tasks/facefusion-configure:1.0.0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

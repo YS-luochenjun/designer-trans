@@ -128,6 +128,7 @@ def _authorize_replacement(service, task_id, expected_decision_id, expected_base
                 or any(n["status"] == "unknown" and n["id"] not in descendants for n in task["nodes"])
                 or any(op.get("task_id") == task_id and op.get("status") == "unknown"
                        and op.get("node_id") not in descendants
+                       and not replaced_with_authorization(service.store, op, "operation")
                        for op in service.store.list("operation"))):
             raise Conflict("An external operation or unknown image still needs reconciliation")
     root = (service.settings.runtime / "tasks" / task_id).resolve()

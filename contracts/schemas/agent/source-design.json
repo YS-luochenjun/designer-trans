@@ -263,6 +263,24 @@
           "maxLength": 1200,
           "title": "Uncertainty",
           "type": "string"
+        },
+        "animation_components": {
+          "items": {
+            "enum": [
+              "translation",
+              "scale",
+              "opacity",
+              "beat_sync",
+              "rotation",
+              "perspective",
+              "deformation",
+              "per_glyph"
+            ],
+            "type": "string"
+          },
+          "maxItems": 8,
+          "title": "Animation Components",
+          "type": "array"
         }
       },
       "required": [
@@ -301,6 +319,14 @@
       },
       "maxItems": 30,
       "title": "Observations",
+      "type": "array"
+    },
+    "inspection_times_ms": {
+      "items": {
+        "type": "integer"
+      },
+      "maxItems": 12,
+      "title": "Inspection Times Ms",
       "type": "array"
     }
   },

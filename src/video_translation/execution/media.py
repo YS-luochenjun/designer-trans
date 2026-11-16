@@ -227,14 +227,9 @@ class MediaTools:
         if len(text) > 10000 or not 6 <= size <= 512:
             raise ValueError("Overlay text or font exceeds limit")
         font = self._font(size)
-        missing = font.getmask(chr(0x10FFFF))
-        missing_signature = (missing.size, bytes(missing))
-        for character in set(text):
-            if character.isspace():
-                continue
-            glyph = font.getmask(character)
-            if (glyph.size, bytes(glyph)) == missing_signature:
-                raise ValueError("Configured font lacks a required glyph; select a suitable font")
+        from media_capabilities.fonts import supports
+        if any(not supports(font, character) for character in set(text)):
+            raise ValueError("Configured font lacks a required glyph; select a suitable font")
         image = Image.new(
             "RGBA", (w, h), ImageColor.getcolor(str(overlay.get("background", "black")), "RGBA")
         )

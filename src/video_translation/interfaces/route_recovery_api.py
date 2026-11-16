@@ -17,11 +17,14 @@ def route_recovery_routes(service, worker, manager):
 
     @router.get("/{task_id}/route-autonomy")
     def snapshot(task_id: str):
-        service.store.require("task", task_id)
+        from ..application.reconciliation import snapshot as reconciliation_snapshot
+        task = service.store.require("task", task_id)
         return {
             "policy": service.store.get("route_policy", task_id),
             "status": service.store.get("route_status", task_id),
-            "runs": [r for r in service.store.list("route_run") if r["task_id"] == task_id][:30],
+            "reconciliation": reconciliation_snapshot(service, task),
+            "runs": sorted([r for r in service.store.list("route_run") if r["task_id"] == task_id],
+                           key=lambda r: (r.get("created_at", ""), r["id"]), reverse=True)[:30],
             "contract_diagnostics": [p for p in service.store.list("route_probe")
                                      if p["task_id"] == task_id][:30],
         }

@@ -2,13 +2,18 @@ import { useEffect, useId, useRef } from "react";
 import type { ReactNode } from "react";
 import {
   AlertCircle,
-  ArrowUpRight,
+  FileImage,
+  ScanFace,
   FileVideo,
   LoaderCircle,
   X,
 } from "lucide-react";
 import { labels, time } from "../lib/types";
 import type { Task } from "../lib/types";
+import { workflowLabel } from "../lib/workflowLabel";
+import { kindLabel } from "../lib/taskKinds";
+import "./DesignerWorkspace.css";
+import { faceStates } from "./FaceFusionFields";
 
 export function Status({ value }: { value: string }) {
   return (
@@ -88,28 +93,32 @@ export function TaskList({
           onClick={() => onSelect(task.id)}
         >
           <div className="task-icon">
-            <FileVideo size={22} />
+            {task.task_kind === "image_translation" ? <FileImage size={22} /> :
+              task.task_kind === "face_swap" ? <ScanFace size={22} /> : <FileVideo size={22} />}
           </div>
           <div className="task-main">
             <strong>{task.title}</strong>
             <small>
-              {task.asset_ids.length} 个原片 <span>·</span>{" "}
-              {task.target_locales.join(" / ")} <span>·</span>{" "}
+              {kindLabel(task)} <span>·</span>{" "}
+              {task.task_kind === "face_swap" ? "原视频 + 来源脸" :
+                `${task.asset_ids.length} 个${task.task_kind === "image_translation" ? "来源图" : "原片"}`}
+              {task.target_locales.length > 0 && <> <span>·</span> {task.target_locales.join(" / ")}</>} <span>·</span>{" "}
               {time(task.created_at)}
             </small>
             <span className="current-node">
-              {task.current_nodes.join("、") || "查看流程与产物"}
+              {task.task_kind === "face_swap" ? faceStates[task.external_execution?.state ?? "configuration_required"] :
+                task.current_nodes.map(workflowLabel).join("、") || "查看流程与产物"}
             </span>
           </div>
-          <div className="task-progress">
-            <span>
-              {task.progress.done}
-              <small> / {task.progress.total} 节点</small>
-            </span>
-            <progress value={task.progress.done} max={task.progress.total} />
+          <div className="task-tail">
+            <div className="task-tail-line">
+              <span className={`task-tail-status task-tail-status-${task.status}`}><i />{labels[task.status] ?? task.status}</span>
+              {task.task_kind === "face_swap" ? <span>FaceFusion</span> :
+                <span className="task-tail-count">{task.progress.done} <small>/ {task.progress.total}</small></span>}
+            </div>
+            {task.task_kind !== "face_swap" &&
+              <progress aria-label={`${task.title}节点进度`} value={task.progress.done} max={Math.max(1, task.progress.total)} />}
           </div>
-          <Status value={task.status} />
-          <ArrowUpRight size={17} />
         </button>
         );
         return row;

@@ -111,7 +111,7 @@ def _context(service, store, task_id):
     frames(initial)
     session_id = observation_binding(task, node, inputs, asset["sha256"], initial)
     state = store.get("observation_session", session_id)
-    if (not state or state.get("status") != "active" or state.get("turn") not in range(LIMIT - 1)
+    if (not state or state.get("status") != "active" or type(state.get("turn")) is not int or state["turn"] < 0
             or state.get("binding_sha256") != session_id or state.get("source_sha256") != asset["sha256"]
             or state.get("task_id") != task_id or state.get("node_id") != node["id"]
             or len(state.get("history", [])) != state["turn"]):
@@ -176,7 +176,7 @@ def _context(service, store, task_id):
         "current_attempt": node["attempt"], "next_attempt": node["attempt"] + 1,
         "source_sha256": asset["sha256"], "verified_files": len(files),
         "file_evidence_sha256": _digest(files), "paid_calls": task.get("paid_calls", 0),
-        "remaining_decision_rounds": LIMIT - state["turn"] - 1,
+        "remaining_decision_rounds": None,
         "scope": "Queue this node for Worker local capture and its remaining bounded observation",
         "replays_successful_inference": False, "resets_budget": False,
     }

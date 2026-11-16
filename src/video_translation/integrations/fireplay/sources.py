@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, quote, unquote, urljoin, urlsplit, urlunsplit
 from uuid import uuid4
 
 VIDEO_SUFFIXES = frozenset({".mp4", ".mov", ".mkv", ".webm", ".avi", ".m4v"})
+IMAGE_SUFFIXES = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp"})
 YOUTUBE_HOSTS = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"})
 URL_PATTERN = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
 VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{11}\Z")
@@ -133,6 +134,7 @@ class _References(HTMLParser):
 def sources_from_brief(brief: dict) -> list[dict]:
     """Return at most 32 reference candidates; every one needs source confirmation."""
     results, seen = [], set()
+    image = brief.get("assetType") == "image"
     for field in ("refText", "description"):
         text = brief.get(field)
         if not isinstance(text, str) or len(text) > 65536:
@@ -148,7 +150,7 @@ def sources_from_brief(brief: dict) -> list[dict]:
                 seen.add(url)
                 candidate = {
                     "id": hashlib.sha256(url.encode()).hexdigest()[:24],
-                    "name": "外部视频引用",
+                    "name": "外部图片引用" if image else "外部视频引用",
                     "kind": "unsupported",
                     "downloadable": False,
                     "origin_field": field,
@@ -159,7 +161,7 @@ def sources_from_brief(brief: dict) -> list[dict]:
                     parsed, host = _validate_url(url)
                     name = Path(unquote(parsed.path)).name
                     candidate["name"] = re.sub(r"[\x00-\x1f\x7f]", "", name)[:120] or host
-                    if host in YOUTUBE_HOSTS:
+                    if host in YOUTUBE_HOSTS and not image:
                         video_id = _youtube_id(parsed, host)
                         if not video_id:
                             candidate["reason"] = "仅支持单个YouTube视频，不支持播放列表或其他页面"
@@ -176,10 +178,12 @@ def sources_from_brief(brief: dict) -> list[dict]:
                                 if _youtube_installed()
                                 else "未安装可选yt-dlp；当前请手动上传原片，安装后仍需启用受控下载适配"
                             )
-                    elif Path(unquote(parsed.path)).suffix.lower() in VIDEO_SUFFIXES:
+                    elif image and Path(unquote(parsed.path)).suffix.lower() in IMAGE_SUFFIXES:
+                        candidate.update(kind="reference_image", downloadable=True)
+                    elif not image and Path(unquote(parsed.path)).suffix.lower() in VIDEO_SUFFIXES:
                         candidate.update(kind="reference_video", downloadable=True)
                     else:
-                        candidate["reason"] = "链接不是支持的视频文件直链，请补传原片"
+                        candidate["reason"] = "链接不是支持的来源文件直链，请补传素材"
                 except SourceFetchError as exc:
                     candidate["reason"] = str(exc)
                 if not any(item["id"] == candidate["id"] for item in results):
@@ -268,6 +272,12 @@ def _video_header(data: bytes) -> bool:
     )
 
 
+def _image_header(data: bytes) -> bool:
+    return (data.startswith(b"\x89PNG\r\n\x1a\n") or data.startswith(b"\xff\xd8\xff")
+            or data.startswith(b"BM")
+            or len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP")
+
+
 class SourceFetcher:
     """Fetch a caller-confirmed direct reference. No shared cookies, auth or proxies."""
 
@@ -283,15 +293,18 @@ class SourceFetcher:
         if source.get("kind") == "youtube":
             raise SourceFetchError("youtube_unavailable", "受控YouTube下载尚未启用，请手动上传原片")
         library = source.get("kind") == "library_video"
+        image = source.get("kind") == "reference_image"
+        suffixes = IMAGE_SUFFIXES if image else VIDEO_SUFFIXES
+        valid_header = _image_header if image else _video_header
         if (
-            source.get("kind") not in {"reference_video", "library_video"}
+            source.get("kind") not in {"reference_video", "library_video", "reference_image"}
             or source.get("downloadable") is not True
         ):
             raise SourceFetchError("unsupported_source", "此引用不能自动下载，请补传原片")
         url = source.get("url")
         parsed, _ = _validate_url(url)
         extension = Path(unquote(parsed.path)).suffix.lower()
-        if extension not in VIDEO_SUFFIXES and not library:
+        if extension not in suffixes and not library:
             raise SourceFetchError("unsupported_source", "原片引用不是支持的视频直链")
         directory = _directory(directory)
         deadline, temporary = time.monotonic() + self.timeout, None
@@ -314,7 +327,8 @@ class SourceFetcher:
                         "GET",
                         target,
                         headers={
-                            "Accept": "video/*, application/octet-stream",
+                            "Accept": ("image/*, application/octet-stream" if image
+                                       else "video/*, application/octet-stream"),
                             "Accept-Encoding": "identity",
                             "Connection": "close",
                             "User-Agent": "VideoTranslationSource/1.0",
@@ -337,19 +351,24 @@ class SourceFetcher:
                     if encoding != "identity" or (
                         media_type
                         and not (
-                            media_type.startswith("video/")
+                            media_type.startswith("image/" if image else "video/")
                             or media_type in {"application/octet-stream", "application/mp4"}
                         )
                     ):
                         raise SourceFetchError("invalid_media", "引用返回的不是受支持的视频文件")
-                    if extension not in VIDEO_SUFFIXES:
-                        extension = {
+                    if extension not in suffixes:
+                        extension = ({
+                            "image/png": ".png",
+                            "image/jpeg": ".jpg",
+                            "image/webp": ".webp",
+                            "image/bmp": ".bmp",
+                        } if image else {
                             "video/mp4": ".mp4",
                             "video/webm": ".webm",
                             "video/quicktime": ".mov",
                             "video/x-matroska": ".mkv",
                             "video/x-msvideo": ".avi",
-                        }.get(media_type)
+                        }).get(media_type)
                         if extension is None:
                             raise SourceFetchError(
                                 "invalid_media", "无后缀素材必须返回明确的视频Content-Type"
@@ -371,14 +390,17 @@ class SourceFetcher:
                             if size > self.max_bytes:
                                 raise SourceFetchError("source_too_large", "原片超过配置的大小限制")
                             prefix = (prefix + chunk)[:32]
-                            if len(prefix) >= 12 and not _video_header(prefix):
+                            if len(prefix) >= 12 and not valid_header(prefix):
                                 raise SourceFetchError("invalid_media", "引用内容不是受支持的视频容器")
                             handle.write(chunk)
-                        if not _video_header(prefix) or (length is not None and int(length) != size):
+                        if not valid_header(prefix) or (length is not None and int(length) != size):
                             raise SourceFetchError("invalid_media", "视频文件不完整或容器格式无效")
                         _remaining(deadline)
                         handle.flush()
                         os.fsync(handle.fileno())
+                    if image:
+                        from video_translation.application.image_assets import inspect_image
+                        inspect_image(temporary)
                     if _directory(directory) != directory:
                         raise SourceFetchError("unsafe_directory", "下载目录发生变化")
                     output = directory / ("source-" + uuid4().hex + extension)

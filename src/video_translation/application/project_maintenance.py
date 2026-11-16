@@ -5,6 +5,7 @@ import re
 import shutil
 
 from video_translation.domain.execution import identity
+from video_translation.domain.limits import budget_policy
 from video_translation.execution.workspace import storage_inventory
 from video_translation.persistence.store import now
 from .tasks import Conflict
@@ -55,6 +56,7 @@ class ProjectMaintenance:
             "scan_errors": skipped, "scope": "task and task-local Route files; logical file lengths",
             "disk_free_bytes": shutil.disk_usage(self.service.settings.runtime).free,
             "resource_budget": task.get("execution_snapshot", {}).get("resource_budget"),
+            "budget_policy": budget_policy(task),
             "call_count": task.get("paid_calls", 0), "call_count_is_money": False,
             "deleted_files": 0, "scheduled_new_calls": False,
         }

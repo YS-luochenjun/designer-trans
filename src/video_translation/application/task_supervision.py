@@ -16,6 +16,9 @@ from ..workflow.graph import SUCCESS, task_status
 def report_work(service, task_id, node_id, *, trigger=None, message_id=None):
     with service.store.lock:
         task = service.store.require("task", task_id)
+        from video_translation.domain.task_types import uses_route_work
+        if not uses_route_work(task):
+            return None
         node = node_for(task, node_id)
         kind = trigger or ("work_completed" if node["status"] in SUCCESS else "work_blocked")
         if kind == "startup_quality_gate":
@@ -98,6 +101,9 @@ def record_direction(service, task_id, message_id):
         task.setdefault("collaboration_rules", []).append(rule)
         receipt = {"id": message_id, "node_id": target["id"], "revision": rule["revision"],
                    "status": "pending_boundary", "at": now(), "quality_acceptance": False}
+        if target["status"] in {"failed", "interrupted", "unknown"}:
+            receipt["status"] = ("reconciling" if unsettled(store, task, {target["id"]})
+                                 else "route_queued")
         message.update(applied_revision=rule["revision"], direction=receipt)
         store.put("task", task)
         store.put("conversation", message)
@@ -134,6 +140,52 @@ def unread_directions(service, task_id, node_id):
 def pending_event(service, task_id):
     return next((e for e in reversed(service.store.list("task_route_event"))
                  if e["task_id"] == task_id and e["status"] in {"queued", "planned", "waiting_work"}), None)
+
+
+def reconcile_directions(service, task_id):
+    """Wake saved directions after project recovery; never dispatch a replacement here."""
+    with service.store.lock:
+        task = service.store.require("task", task_id)
+        if (task.get("control_paused") or task["status"] in {"cancelled", "completed"}
+                or service.store.get("deletion_receipt", task_id)):
+            return
+        for event in service.store.list("task_route_event"):
+            if event["task_id"] != task_id or event["trigger"] != "user_direction":
+                continue
+            legacy = (event["status"] == "blocked" and event.get("reason") ==
+                      "Original Work result is unsettled; reconcile its receipt first")
+            if event["status"] != "waiting_reconciliation" and not legacy:
+                continue
+            node = node_for(task, event["node_id"])
+            if not node:
+                continue
+            message_id = event.get("message_id")
+            if unsettled(service.store, task, {node["id"]}):
+                from .reconciliation import snapshot
+                reconciliation = snapshot(service, task, {node["id"]})
+                service.store.update("task_route_event", event["id"], lambda e: e.update(
+                    status="waiting_reconciliation",
+                    reconciliation=reconciliation))
+                continue
+            queued = node["status"] in {"pending", "queued"}
+            active = node["status"] in {"running", "waiting_external"}
+            if queued or active:
+                service.store.update("task_route_event", event["id"], lambda e: e.update(
+                    status="forwarded", finished_at=now()))
+                status = "work_queued" if queued else "pending_boundary"
+            elif node["attempt"] == event["attempt"]:
+                # Same stopped Work can now be planned against its fresh evidence.
+                basis = plan_basis(service, task, node)
+                service.store.update("task_route_event", event["id"], lambda e: e.update(
+                    status="queued", basis=basis))
+                status = "route_queued"
+            else:
+                service.store.update("task_route_event", event["id"],
+                                     lambda e: e.update(status="superseded", finished_at=now()))
+                status = "route_queued"
+            if message_id and service.store.get("conversation", message_id):
+                service.store.update("conversation", message_id,
+                                     lambda m: m["direction"].update(status=status))
 
 
 def reconcile_work_reports(service, task_id):
@@ -224,7 +276,7 @@ def apply_plan(service, event_id, plan):
         node = node_for(task, plan.get("node_id"))
         if (not node or node["asset_id"] != origin["asset_id"]
                 or node["locale"] not in {None, origin["locale"]}
-                or node["definition_id"] in {"prepare", "deliver", "review"}):
+                or node["definition_id"] in {"prepare", "prepare_images", "deliver", "review", "image_review"}):
             raise Conflict("Route 返工须选择同素材和语言的实际制作节点")
         if task.get("control_paused") or task["status"] in {"cancelled", "completed"}:
             raise Conflict("任务已暂停或结束，Route 保留计划等待用户恢复")
@@ -257,7 +309,7 @@ def apply_plan(service, event_id, plan):
             **{k: deepcopy(node.get(k)) for k in ("attempt", "status", "output", "artifact_ids", "error")},
             "reason": "Task Route applied bounded rework", "route_event_id": event_id})
         review_defects = (deepcopy(origin["output"].get("defects", []))
-                          if origin["definition_id"] == "review" else [])
+                          if origin["definition_id"] in {"review", "image_review"} else [])
         invalidate_descendants(local, task, node)
         node.update(status="pending", error=None, finished_at=None, stage_readiness="needs_repair")
         for branch in branches:
@@ -282,10 +334,8 @@ def _reopen_clean(service, task, node, event, plan):
     if len(sessions) != 1:
         raise Conflict("返工需唯一原清底会话")
     state = sessions[0]
-    if (state.get("candidate") or state.get("pending_turn") is not None
-            or state.get("archive_review") or state.get("pipeline_review")
-            or any(a.get("needs_scope_review") for a in state.get("accepted", []))):
-        raise Conflict("先处理原候选或范围争议")
+    if state.get("pending_turn") is not None:
+        raise Conflict("先结清原在途动作")
     if any(d.get("task_id") == task["id"] and d.get("node_id") == node["id"]
            and d.get("key") == f"clean-{state['turn']}" and d["status"] in {
                "running", "unknown", "succeeded", "invalid_response"}
@@ -295,8 +345,13 @@ def _reopen_clean(service, task, node, event, plan):
     source = service.checked_path(asset)
     if service.hash_file(source) != asset["sha256"]:
         raise Conflict("原片身份变化")
+    candidate = state.get("candidate")
+    if candidate and candidate.get("input_sha256") != state["base"]["sha256"]:
+        raise Conflict("待审候选不属于当前底片")
     try:
         _media_evidence(service, task, state, source)
+        if candidate:
+            _media_evidence(service, task, {"base": candidate}, source)
     except (OSError, KeyError, ValueError) as exc:
         raise Conflict("原清底媒体或依赖已变化") from exc
     if event.get("execution_authorization_id"):
@@ -312,6 +367,7 @@ def _reopen_clean(service, task, node, event, plan):
     state["finished"] = False
     state.pop("routing_stop", None)
     state.pop("completion_feedback_stop", None)
+    # Unjudged candidates and disputed accepted scopes resume review before new repairs.
     state.setdefault("work_feedback", {})[event["id"]] = {
         "id": event["id"], "trigger": "user_continuation" if event["trigger"] in {
             "user_direction", "direction_after_work", "human_rejected", "user_answer"} else "route_rework",

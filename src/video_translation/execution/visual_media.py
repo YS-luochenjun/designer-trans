@@ -399,23 +399,35 @@ class VisualMedia:
         return source
 
     def _render_once(self, source, target, info, transform):
+        return self._encode_frames(target, info, self._decoded(source, info),
+                                   audio_source=self._audio_source(source), transform=transform)
+
+    def _encode_frames(self, target, info, frames, *, audio_source=None, transform=None,
+                       output_limit=None):
+        limit = min(self.MAX_OUTPUT_BYTES, self.media.max_source_bytes,
+                    output_limit if output_limit is not None else self.MAX_OUTPUT_BYTES)
         with TemporaryDirectory(prefix="visual-render-", dir=target.parent) as scratch, TemporaryFile() as errors:
             output = Path(scratch) / target.name
             args = self._base() + ["-f", "rawvideo", "-pix_fmt", "rgb24", "-s",
-                                   f"{info['width']}x{info['height']}", "-r", info["rate"], "-i", "pipe:0",
-                                   "-protocol_whitelist", "file,pipe", "-i", self._audio_source(source),
-                                   "-map", "0:v:0", "-map", "1:a?", "-map_metadata", "-1",
-                                   "-c:v", "libx264rgb", "-crf", "0", "-preset", "ultrafast", "-threads", "1",
-                                   "-pix_fmt", "rgb24", "-c:a", "copy", "-fps_mode", "passthrough"]
+                                   f"{info['width']}x{info['height']}", "-r", info["rate"], "-i", "pipe:0"]
+            if audio_source is not None:
+                args += ["-protocol_whitelist", "file,pipe", "-i", audio_source,
+                         "-map", "0:v:0", "-map", "1:a?", "-c:a", "copy"]
+            else:
+                args += ["-map", "0:v:0", "-an"]
+            args += ["-map_metadata", "-1", "-c:v", "libx264rgb", "-crf", "0",
+                     "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "rgb24",
+                     "-fps_mode", "passthrough"]
             # Raw video EOF bounds frames. A video-duration cutoff drops copied
             # audio tail packets when the original audio outlasts its picture.
-            args += ["-fs", str(min(self.MAX_OUTPUT_BYTES, self.media.max_source_bytes)), output]
+            args += ["-fs", str(limit), output]
             process = subprocess.Popen([str(a) for a in args], stdin=subprocess.PIPE,
                                        stdout=subprocess.DEVNULL, stderr=errors)
             try:
-                with self._guard([process], [output], [errors]), self._decoded(source, info) as frames:
-                    for index, image in enumerate(frames):
-                        transform(image, index * 1000 / info["fps"])
+                with self._guard([process], [output], [errors]), frames as images:
+                    for index, image in enumerate(images):
+                        if transform is not None:
+                            transform(image, index * 1000 / info["fps"])
                         process.stdin.write(image.tobytes())
                     process.stdin.close()
                     if process.wait() != 0:
@@ -425,6 +437,8 @@ class VisualMedia:
                     process.stdin.close()
                 except (BrokenPipeError, OSError):
                     pass  # Preserve the original validation/watchdog error after process termination.
+            if output.stat().st_size >= limit:
+                raise MediaError("Visual media exceeded output byte limit")
             _, result = self._info(output)
             if any(result[key] != info[key] for key in ("width", "height", "rate", "frames", "has_audio")):
                 raise MediaError("Rendered media failed geometry, duration or audio validation")
@@ -595,13 +609,9 @@ class VisualMedia:
                 raise ValueError("Trusted font could not be decoded") from None
         else:
             font = self.media._font(font_size)
-        missing = font.getmask(chr(0x10FFFF))
-        signature = (missing.size, bytes(missing))
-        for character in set(text):
-            if not character.isspace():
-                glyph = font.getmask(character)
-                if (glyph.size, bytes(glyph)) == signature:
-                    raise ValueError("Configured font lacks a required glyph")
+        from media_capabilities.fonts import supports
+        if any(not supports(font, character) for character in set(text)):
+            raise ValueError("Configured font lacks a required glyph")
         color = self._color(style.get("color", "#ffffff"))
         outline_color = self._color(style.get("outline_color", "#000000"))
         shadow_color = self._color(style.get("shadow_color", "#00000000"))

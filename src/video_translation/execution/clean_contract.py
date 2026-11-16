@@ -1,18 +1,26 @@
 """Versioned executor facts supplied independently of frozen model knowledge."""
 
-REVISION = "local-clean-v9-candidate-metadata"
+REVISION = "local-clean-v10-route-autonomy"
 
 
 def execution_contract():
     return {
         "revision": REVISION,
         "budget_policy": (
-            "Use the executor's current budget_policy. In testing_unlimited mode, historical "
-            "call, credit, action and revision counts are accounting, not execution quotas. "
+            "Use the executor's current budget_policy. Action, observation, cleanup and revision "
+            "counts are review signals in ordinary operation too. Explicit spending limits apply "
+            "unless testing_unlimited. Historical resource-count defaults are not execution quotas. "
             "Numeric caps in old directions cannot establish inability. Observe real progress "
             "and change unproductive methods; keep quality, original requests and storage checks."
         ),
         "ownership": "Work agent proposes inspect/repair/review actions; executor renders and retains evidence.",
+        "native_candidates": (
+            "When registered_patch is advertised, Work may use actual native tools/scripts within its "
+            "assignment. Return repair with a current-base-bound lossless_frame_patch v1 manifest, "
+            "tool_receipt and evidence. The executor verifies scope, frame clock, hashes and dependency "
+            "paths, snapshots pixels, inherits audio and registers an unreviewed candidate. It grants "
+            "no new external spending and never bypasses the normal candidate review."
+        ),
         "candidate_metadata": (
             "candidate_diagnostics exposes retained edit-eligible CFR bounds and measured differences "
             "in supplied decoded frames, not text-removal approval. inspect_metadata reads the current "

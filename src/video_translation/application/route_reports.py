@@ -2,6 +2,9 @@
 
 
 def report(task, events, node=None):
+    from video_translation.domain.task_types import uses_route_work
+    if not uses_route_work(task):
+        return None
     nodes = [node] if node else task["nodes"]
     current = node or next((n for n in nodes if n["status"] in {
         "running", "waiting_external", "waiting_user"}), None)
@@ -13,11 +16,16 @@ def report(task, events, node=None):
     label = (current or {}).get("label", "制作")
     if task["status"] == "cancelled":
         phase, summary, next_step = "cancelled", "任务已停止，原结果保留。", "等待新的制作要求。"
+    elif task.get("workflow", {}).get("execution") == "draft_only":
+        phase, summary, next_step = (
+            "draft", "素材和要求已保存为任务草稿，尚未开始制作。",
+            "当前开发版本已接入任务与素材，制作执行器接入后再启用。")
     elif task.get("control_paused"):
         phase, summary, next_step = "paused", "任务已暂停，当前结果和要求已保留。", "恢复后由 Route 接续协调。"
     elif current and current["status"] in {"running", "waiting_external"}:
         phase, summary, next_step = "working", f"Work 正在处理{label}。", "结果先交给 Route 检阅，再安排后续制作。"
-    elif current and (current["status"] == "unknown" or event and event["status"] == "unknown"):
+    elif current and (current["status"] == "unknown" or event and event["status"] in {
+            "unknown", "waiting_reconciliation"}):
         phase, summary, next_step = (
             "awaiting_result", "上次请求的结果尚未确认，后续制作等待核对。",
             "Route 需要先核对原请求回执，再决定后续工作。")

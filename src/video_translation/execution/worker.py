@@ -12,6 +12,7 @@ from video_translation.integrations.agents import UnknownExternalResult
 from video_translation.integrations.providers.kie import PendingExternalResult
 from video_translation.persistence.store import WorkerLock, now
 from video_translation.workflow.graph import ready_nodes, task_status
+from video_translation.domain.task_types import uses_route_work
 
 logger = logging.getLogger(__name__)
 
@@ -107,6 +108,18 @@ class Worker:
         deleting = {r["id"] for r in self.store.list("deletion_receipt")}
         from .native_imagegen import pending_request
         for task in reversed(self.store.list("task")):
+            if not uses_route_work(task):
+                if (task["id"] not in self.futures and task["id"] not in deleting
+                        and task["status"] not in {"cancelled", "completed"}
+                        and not task.get("control_paused")
+                        and task.get("external_execution", {}).get("state") == "pending"):
+                    from video_translation.application.facefusion import execute
+                    self.futures[task["id"]] = self.pool.submit(
+                        execute, self.service, task["id"], self.stop_event)
+                    capacity -= 1
+                    if capacity == 0:
+                        break
+                continue
             if task["id"] not in self.futures and task["status"] == "waiting_user":
                 from video_translation.application.observation_route_handoff import queue_legacy_observation
                 try:
@@ -140,17 +153,25 @@ class Worker:
                 del self.route_futures[task_id]
                 if not future.cancelled() and future.exception():
                     logger.error("Task Route failed for %s: %s", task_id, type(future.exception()).__name__)
-        from video_translation.application.task_supervision import pending_event, reconcile_work_reports
+        from video_translation.application.task_supervision import (
+            pending_event, reconcile_directions, reconcile_work_reports,
+        )
         for task in reversed(self.store.list("task")):
+            if not uses_route_work(task):
+                continue
             if len(self.route_futures) >= self.service.settings.max_concurrent_tasks:
                 break
             if task["id"] in self.route_futures or self.store.get("deletion_receipt", task["id"]):
                 continue
             future = self.futures.get(task["id"])
             if future is None or future.done():
+                from video_translation.application.stale_clean_decisions import reconcile as reconcile_stale
+                if reconcile_stale(self.service, task["id"]):
+                    continue
                 from video_translation.application.retained_clean_checks import reconcile
                 if reconcile(self.service, task["id"]):
                     continue
+            reconcile_directions(self.service, task["id"])
             reconcile_work_reports(self.service, task["id"])
             message = self.service.collaboration.pending(task["id"], interaction="route")
             event = (not task.get("control_paused") and task["status"] not in {"cancelled", "completed"}
@@ -159,6 +180,8 @@ class Worker:
                 self.route_futures[task["id"]] = self.route_pool.submit(self.run_route, task["id"])
 
     def run_route(self, task_id):
+        if not uses_route_work(self.store.require("task", task_id)):
+            return
         message = self.service.collaboration.pending(task_id, interaction="route")
         if message:
             from .coordination import discuss
@@ -168,6 +191,8 @@ class Worker:
             process_event(self.executor, task_id)
 
     def run_task(self, task_id):
+        if not uses_route_work(self.store.require("task", task_id)):
+            return
         active = set()
         while not self.stop_event.is_set() or active:
             if active:

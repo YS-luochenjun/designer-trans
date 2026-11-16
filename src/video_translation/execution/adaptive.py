@@ -9,7 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from video_translation.application.tasks import Conflict
-from video_translation.domain.production import SourceDesign, CleanAction
+from video_translation.domain.production import CleanAction
 from video_translation.integrations.agents.errors import CapabilityUnavailable, ConfirmedJobFailure, UnknownExternalResult
 from video_translation.persistence.store import now
 from .clean_policy import QUALITY_RESOURCE_ID, coverage_summary, recent_history, validate_quality
@@ -57,28 +57,8 @@ class AdaptiveProduction:
             raise Conflict('任务已取消，停止后续制作')
 
     def fonts(self):
-        candidates = []
-        explicit = self.e.media.font
-        if explicit:
-            candidates.append(Path(explicit))
-        project = self.service.settings.root / 'config' / 'fonts'
-        if project.is_dir():
-            candidates.extend(sorted(project.glob('*.ttf'))[:30])
-            candidates.extend(sorted(project.glob('*.otf'))[:30])
-        candidates += [Path(p) for p in (
-            'C:/Windows/Fonts/msyh.ttc', 'C:/Windows/Fonts/msyhbd.ttc',
-            'C:/Windows/Fonts/arial.ttf', 'C:/Windows/Fonts/arialbd.ttf',
-            'C:/Windows/Fonts/meiryo.ttc', 'C:/Windows/Fonts/malgun.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
-            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc')]
-        result = {}
-        for path in candidates:
-            if path.is_file() and not path.is_symlink():
-                result[path.name] = str(path.resolve())
-        if result:
-            result['default'] = next(iter(result.values()))
-        return result
+        from media_capabilities.fonts import discover
+        return discover(self.service.settings.root / "config" / "fonts", self.e.media.font)
 
     def frames(self, video, times, label, key):
         times = sorted(set(int(t) for t in times))
@@ -180,11 +160,10 @@ class AdaptiveProduction:
 
     def decision(self, inputs, model, frames, *, key):
         from video_translation.persistence.transaction import TransactionStore
-        from video_translation.domain.limits import budget_policy, testing_unlimited
+        from video_translation.domain.limits import budget_policy
 
         self.active()
-        if testing_unlimited(self.task):
-            inputs = {**inputs, "budget_policy": budget_policy(self.task)}
+        inputs = {**inputs, "budget_policy": budget_policy(self.task)}
         from video_translation.application.task_supervision import live_directions
         directions = live_directions(self.service, self.task["id"], self.node["id"])
         if directions:
@@ -247,40 +226,8 @@ class AdaptiveProduction:
         return result
 
     def analyze(self):
-        if not self.texts:
-            return {'lettering': [], 'scene_boundaries_ms': [], '_skip': '没有需要替换的画面文字'}
-        result = {'lettering': [], 'scene_boundaries_ms': [], 'observations': []}
-        items = list(self.texts.values())
-        for batch_index in range(0, len(items), 4):
-            batch = items[batch_index:batch_index + 4]
-            observed_times = self.times(batch)
-            frames = self.frames(self.source, observed_times, '原片', f'source-design-{batch_index}')
-            part = self.decision({'inventory': {**self.inventory, 'texts': batch}, 'media': self.prepared['media'],
-                'available_fonts': list(self.fonts()), 'observed_times_ms': observed_times,
-                'instructions': '保存源设计而不是决定整片工具。只为本批实例记录字体、描边、布局、显隐、轨迹、背景与遮挡。evidence_times_ms必须来自实际给出的observed_times_ms。证据不足写uncertainty，不能伪造。'},
-                SourceDesign, frames, key=f'source-design-{batch_index}')
-            if {v['source_id'] for v in part['lettering']} != {v['id'] for v in batch}:
-                raise ValueError('源设计批次遗漏文字或混入其他批次实例')
-            if any(not set(v['evidence_times_ms']).issubset(observed_times) for v in part['lettering']):
-                raise ValueError('源设计引用了并未提供的图像时间')
-            result['lettering'].extend(part['lettering'])
-            result['scene_boundaries_ms'].extend(part['scene_boundaries_ms'])
-            result['observations'].extend(part['observations'])
-        result['scene_boundaries_ms'] = sorted(set(result['scene_boundaries_ms']))
-        ids = [v['source_id'] for v in result['lettering']]
-        if set(ids) != set(self.texts) or len(ids) != len(set(ids)):
-            raise ValueError('源设计记录必须覆盖且只覆盖全部待译文字')
-        speech_ids = {s['id'] for s in self.inventory['speech']}
-        for entry in result['lettering']:
-            if entry['speech_id'] and entry['speech_id'] not in speech_ids:
-                raise ValueError('口播字幕关联了不存在的人声实例')
-            item = self.texts[entry['source_id']]
-            if any(t < 0 or t >= self.duration for t in entry['evidence_times_ms']):
-                raise ValueError('源设计观察时间超出原片')
-            self.check_motion(entry['motion'], item)
-        result['source_sha256'] = self.service.hash_file(self.source)
-        self.service.write_json(self.task['id'], self.node, 'source-design.json', result)
-        return result
+        from .source_design import analyze
+        return analyze(self)
 
     @staticmethod
     def check_motion(points, item):
@@ -306,6 +253,17 @@ class AdaptiveProduction:
                  'tracked_donor': '同镜头干净供体按已观察区域轨迹逐帧移动缩放，并用protected_foreground多边形关键帧保留移动前景、逐帧检查未保护边缘亮度。须tracked_donor关键帧覆盖起止、donor_time_ms与donor_region；参见execution_contract。显式逐帧保护已实现，自动分割/旋转/透视未实现；不能把缺少自动分割泛化为没有遮挡保护，不凭跟踪分数接受',
                  'accept': '查看候选后接受当前局部修复', 'finish': '全部文字区间覆盖后结束清底'}
         from .motion_tracking import available
+        from .work_autonomy import enabled as open_work
+        if open_work(self.task):
+            tools['registered_patch'] = (
+                'Use native tools/scripts within assigned scope, then repair(method=registered_patch) '
+                'with candidate_manifest {path,sha256}, tool_receipt and evidence. Produce a '
+                'lossless_frame_patch v1 (.vpatch.json) bound to the current base, native width/height/'
+                'frames/rate, RGB PNG FramePatch entries {frame_index,rectangle:[x,y,right,bottom],'
+                'image:{path,sha256}}. All new files must be inside this task directory. '
+                'Only assigned time/region may change. Registration creates an unreviewed candidate; '
+                'normal boundary, subject, text, edge and temporal review is still required. '
+                'No additional external spending authority.')
         if available():
             tools['track'] = 'CPU初始模板逐帧位置/小幅缩放跟踪；指定同镜头start_ms/end_ms、首帧region及evidence，最多10秒300帧。只返回待复核轨迹，遮挡或低置信停止，不自动修改范围/覆盖/源设计'
         if (not self.task.get('review_draft_authorization')
@@ -343,12 +301,17 @@ class AdaptiveProduction:
         quality_policy = json.loads(policy_resource['content'])
         state_id = digest({'task': self.task['id'], 'node': self.node['id'], 'source': self.service.hash_file(self.source), 'design': design})
         state = self.store.get('production_session', state_id)
+        design_rebinding = None
         if state is None:
             existing = [s for s in self.store.list('production_session')
                         if s.get('task_id') == self.task['id'] and s.get('node_id') == self.node['id']]
             if existing:
-                raise CapabilityUnavailable(
-                    '源设计已变化但已有清底会话；先核对原接受记录与新运动范围，不能另建会话丢失已修复内容')
+                from .clean_design_binding import ERROR, checked_rebinding
+                if len(existing) != 1:
+                    raise CapabilityUnavailable(ERROR)
+                state = existing[0]
+                design_rebinding = checked_rebinding(
+                    self.service, self.task, self.node, state, design)
         state = state or {
             'id': state_id, 'task_id': self.task['id'], 'node_id': self.node['id'], 'turn': 0,
             'base': {'path': str(self.source), 'sha256': self.service.hash_file(self.source)},
@@ -356,6 +319,8 @@ class AdaptiveProduction:
         for source_id, override in state.get('text_overrides', {}).items():
             self.texts[source_id].update(override)
         base = self.verified(state['base'])
+        from .clean_rework import prepare as prepare_rework
+        prepare_rework(self, state, progress(self.texts, state))
         from .review_draft import authorized, is_review_draft, handoff, reconsider_handoff
         if reconsider_handoff(self, state):
             self.store.put('production_session', state)
@@ -378,15 +343,16 @@ class AdaptiveProduction:
             require_clean_plate(result)
             if progress(self.texts, state)['unresolved_instances']:
                 raise CapabilityUnavailable('清底完成记录仍有未覆盖区间，须复核原结果，不能直接译字')
+            if design_rebinding:
+                from .clean_design_binding import retain_rebinding
+                retain_rebinding(self.store, state, design_rebinding)
             return result
         if self.task.get('production_policy', {}).get('mode') == 'completion_first':
             raise CapabilityUnavailable('旧完成优先路线已停用：先恢复逐阶段质量检查，不能将有残字底片交给译字')
-        from video_translation.domain.limits import effective_limit
-        limit = effective_limit(self.task, 'max_visual_steps', None)
+        # Action count is a review signal. Explicit task spending, storage,
+        # unresolved requests and quality gates remain the actual boundaries.
         from .work_autonomy import enabled as open_work
-        if open_work(self.task):
-            limit = None
-        while limit is None or state['turn'] < limit:
+        while True:
             self.active()
             if self.store.require('task', self.task['id']).get('control_paused'):
                 return {'_paused': True}
@@ -399,11 +365,17 @@ class AdaptiveProduction:
             from .review_draft import bound_work
             bound_work(self, state, summary)
             summary = progress(self.texts, state)
+            clean_rework = prepare_rework(self, state, summary)
             from .work_conclusions import preserve_output_reserve
             if preserve_output_reserve(self, state):
                 return handoff(self, state, summary)
             from .clean_supervision import pending as pending_feedback, acknowledge
             feedback = pending_feedback(self, state)
+            from .clean_rework import new_obstacle, requires_work
+            quality_rework = requires_work(clean_rework, summary)
+            obstacle = new_obstacle(clean_rework, feedback) if quality_rework else None
+            if obstacle:
+                raise CapabilityUnavailable('清底质量返工需Route调整方法：' + obstacle['reason'])
             if (state.get('completion_feedback_stop', {}).get('execution_binding') == state.get('execution_binding')
                     and state.get('completion_feedback_stop') and not feedback):
                 state['routing_stop'] = state['completion_feedback_stop']
@@ -416,7 +388,7 @@ class AdaptiveProduction:
                 scope_review = pending_scope_review(self.texts, state, scope_clock)
                 if scope_review:
                     state['times_ms'] = scope_review['times_ms']
-            if ((summary['all_deferred'] and not state.get('candidate') or feedback)
+            if ((summary['all_deferred'] and not state.get('candidate') or feedback and not quality_rework)
                     and state.get('pending_turn') is None and not self.node.get('external_pending')
                     and not state.get('archive_review') and not scope_review):
                 from .clean_routing import route_deferred
@@ -494,6 +466,7 @@ class AdaptiveProduction:
             if len(saved) > 1:
                 raise Conflict('同一制作轮存在多个决策，请核对后恢复')
             from .context_history import retain_context_history
+            from .work_conclusions import continuity
             history_ref = (retain_context_history(self, state)
                            if not saved and self.task.get('agent_engine') == 'codex' else None)
             action = CleanAction.model_validate(saved[0]['result']).model_dump() if saved else self.decision({
@@ -513,15 +486,22 @@ class AdaptiveProduction:
                 'runtime_work_policy': {
                     'tools': 'native_codex' if self.task.get('agent_engine') == 'codex' else 'configured_transport',
                     'autonomy': 'open' if open_work(self.task) else 'bounded',
-                    'fixed_action_limit': not open_work(self.task),
+                    'fixed_action_limit': False,
                     'single_reference_per_source': not open_work(self.task),
                     'image_executor': 'project_codex_worker',
                     'cost_ledger_pause_cancel_and_no_unknown_replay': True},
                 'review_draft_policy': self.task.get('review_draft_authorization'),
                 'output_goal': self.task.get('output_goal', 'quality_approved'),
                 'route_work_order': state.get('route_work_order'),
+                'clean_rework': clean_rework,
                 'new_execution': state.get('new_execution'),
                 'work_conclusions': list(state.get('work_conclusions', {}).values()),
+                'work_context': continuity(state, summary),
+                'native_candidate_workspace': {
+                    'task_root': str(self.media.workspace.root),
+                    'base': dict(state['base']),
+                    'schema': 'execution/patch-manifest',
+                    'quality_acceptance': False},
                 'continuous_work_orders': temporal_work_orders(self, state),
                 'historical_retirement': retired_candidates(self.store, state),
                 'clean_generated_references': available_references(self, state['base']['sha256']),
@@ -579,7 +559,7 @@ class AdaptiveProduction:
                 'baseline_findings': state.get('baseline_findings', []),
                 'resource_mode': 'on_demand', 'resource_ids': state.get('resource_ids', []),
                 'candidate': {k:v for k,v in (state['candidate'] or {}).items() if k != 'path'},
-                'history': recent_history(state['history']), 'remaining_steps': None if limit is None else limit - turn,
+                'history': recent_history(state['history']), 'remaining_steps': None,
                 'instructions': (
                     '你是work agent，负责真实视频观察、局部方法选择、提出处理参数和候选审阅；执行器实际运行工具。'
                     '完整候选优先时，错误与拒绝会交给Route统筹，不必等待所有实例失败。'
@@ -588,6 +568,8 @@ class AdaptiveProduction:
                     '不要为压低轮数跨剪辑或遮挡强行合并，也不要无证据逐帧拆解稳定连续文字。'
                     'context_projection为有界历史视图，省略不代表不存在；需要旧细节时按retained_history的路径与SHA只读查ID，再inspect_archive观察实际媒体。'
                     '若有route_work_order，先回答该实例的具体证据问题再决定修复或说明真实缺口，不把路由建议当成已完成观察。'
+                    'clean_rework是Route针对已覆盖区间的新质量返工；先核其实质缺陷，保留无关已接受修复。'
+                    'coverage_percent=100只表示历史文字区间已处理，不表示装饰保护、边缘或连续性已通过。'
                     'execution_contract说明当前已实现能力；冻结知识说明选型和质量要求。显式protected_foreground已实现，自动分割未实现，二者不能混淆。'
                     '当前budget为费用依据；历史obstacle里的旧余额或旧能力说明不是当前事实。'
                     '若video_model_trial存在，仅指定source可使用Wan3试修一次，最多64 credits；'
@@ -635,6 +617,9 @@ class AdaptiveProduction:
                 state['turn'] += 1
                 self.store.put('production_session', state)
                 continue
+            if not saved:
+                from .clean_rework import acknowledge as acknowledge_rework
+                acknowledge_rework(self, state, clean_rework, turn)
             state['history'].append({'turn': turn, 'decision': action,
                                      'input_base_sha256': state['base']['sha256']})
             from .convergence import record_observation
@@ -834,26 +819,28 @@ class AdaptiveProduction:
                     raise ValueError('链路诊断不能代替原片/底片/候选三方验收')
                 candidate = state['candidate']
                 if not candidate or action['candidate_id'] != candidate['id']:
-                    raise ValueError('不能接受不存在或已被替换的候选')
-                self.verified(candidate)
-                _, clock = self.media._info(self.source)
-                required = set(boundary_indices(candidate['start_ms'], candidate['end_ms'],
-                                                clock['rate'], clock['frames']))
-                observed = {f['frame_index'] for f in frames if '当前局部修复候选' in f['label']}
-                if not required.issubset(observed):
-                    raise ValueError('候选首尾内外帧未完整观察，不能接受')
-                if candidate.get('input_sha256') != state['base']['sha256']:
-                    raise ValueError('候选基底已经变化，必须重新合成后复核')
-                score = validate_quality(action.get('quality'), quality_policy)
-                state['coverage_clock'] = {k: clock[k] for k in ('rate', 'frames')}
-                state['accepted'].append({k:v for k,v in candidate.items() if k != 'path'} |
-                                         {'evidence': action['evidence'], 'quality': action.get('quality'), 'score': score,
-                                          'quality_policy_ref': policy_ref,
-                                          'boundary_review': {'required_frames': sorted(required),
-                                              'observed_frames': sorted(observed), 'baseline_sha256': state['base']['sha256']}})
-                state['base'] = {'path': candidate['path'], 'sha256': candidate['sha256']}
-                state['candidate'] = None
-                reconsider_accepted_source(self.texts, state, candidate)
+                    from ..application.stale_clean_decisions import record_stale
+                    record_stale(state, action)
+                else:
+                    self.verified(candidate)
+                    _, clock = self.media._info(self.source)
+                    required = set(boundary_indices(candidate['start_ms'], candidate['end_ms'],
+                                                    clock['rate'], clock['frames']))
+                    observed = {f['frame_index'] for f in frames if '当前局部修复候选' in f['label']}
+                    if not required.issubset(observed):
+                        raise ValueError('候选首尾内外帧未完整观察，不能接受')
+                    if candidate.get('input_sha256') != state['base']['sha256']:
+                        raise ValueError('候选基底已经变化，必须重新合成后复核')
+                    score = validate_quality(action.get('quality'), quality_policy)
+                    state['coverage_clock'] = {k: clock[k] for k in ('rate', 'frames')}
+                    state['accepted'].append({k:v for k,v in candidate.items() if k != 'path'} |
+                                             {'evidence': action['evidence'], 'quality': action.get('quality'), 'score': score,
+                                              'quality_policy_ref': policy_ref,
+                                              'boundary_review': {'required_frames': sorted(required),
+                                                  'observed_frames': sorted(observed), 'baseline_sha256': state['base']['sha256']}})
+                    state['base'] = {'path': candidate['path'], 'sha256': candidate['sha256']}
+                    state['candidate'] = None
+                    reconsider_accepted_source(self.texts, state, candidate)
             elif action['action'] == 'confirm_scope':
                 observed = {f['frame_index'] for f in frames if '已接受底片' in f['label']}
                 try:
@@ -887,18 +874,12 @@ class AdaptiveProduction:
             from ..application.retained_clean_checks import finish_replay
             if not finish_replay(self, state, turn):
                 self.store.put('production_session', state)
-            if action['action'] == 'accept':
+            if action['action'] == 'accept' and not state['history'][-1].get('tool_error'):
                 record_local_experience(self.store, state, self.texts)
             self.service.write_json(self.task['id'], self.node, 'production-session.json', state)
             if state['finished']:
                 from .clean_output import finished_output
                 return finished_output(self, state)
-        if (authorized(self.task) and not state.get('candidate')
-                and state.get('pending_turn') is None and not self.node.get('external_pending')):
-            state['routing_stop'] = {'reason': 'Authorized clean decision allowance exhausted; '
-                                              'preserving current base and unresolved intervals'}
-            return handoff(self, state, progress(self.texts, state))
-        raise CapabilityUnavailable('已达到局部制作决策次数上限，保存当前结果与未完成项；请检查后调整任务')
 
     def wan_exclusions(self, state):
         from .fidelity import enabled, wan_exclusions
@@ -1029,7 +1010,11 @@ class AdaptiveProduction:
         if method not in self.capabilities():
             raise CapabilityUnavailable('当前任务没有可用或获准的该制作工具')
         target = self.candidate_target(f'repair-{turn}')
-        if method == 'tracked_donor':
+        registration = None
+        if method == 'registered_patch':
+            from .candidate_registration import register
+            registration = register(self, action, base, target, region, start, end)
+        elif method == 'tracked_donor':
             from .tracked_donor import apply_tracked_donor
             apply_tracked_donor(self.media, base, target, start_ms=start, end_ms=end, envelope=region,
                                donor_time_ms=action['donor_time_ms'], donor_region=action['donor_region'],
@@ -1146,6 +1131,7 @@ class AdaptiveProduction:
         artifact = self.service.artifact(self.task['id'],self.node,target,self.candidate_kind(target),
                                          f'局部清底候选 {turn+1}')
         return {'id':artifact['id'],'path':str(target),'sha256':artifact['sha256'],'source_id':item['id'],
+                **({'registration': registration} if registration else {}),
                 **({'pipeline': {'media_type': 'still_image',
                     **{key: {'path': str(path), 'sha256': self.service.hash_file(path)}
                        for key, path in (('input', crop), ('generated', generated),

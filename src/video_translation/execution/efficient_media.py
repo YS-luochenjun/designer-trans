@@ -328,18 +328,57 @@ class EfficientVisualMedia(VisualMedia):
     def clip(self, source, target, start_ms, end_ms, region=None):
         if not self.is_manifest(source):
             return super().clip(source, target, start_ms, end_ms, region)
-        target = self._target(source, target)
-        with TemporaryDirectory(prefix="clip-input-", dir=target.parent) as scratch:
-            materialized, _ = self.materialize(source, Path(scratch) / "source.mp4")
-            return super().clip(materialized, target, start_ms, end_ms, region)
+        source, info = self._info(source)
+        self._window(info, start_ms, end_ms)
+        first, stop = frame_window(start_ms, end_ms, info["rate"])
+        target, result = self._clip_window(source, target, info, first, min(stop, info["frames"]), region)
+        return {k: v for k, v in result.items() if k not in {"rate", "frames"}} | {
+            "path": str(target), "start_ms": start_ms, "end_ms": end_ms}
 
     def clip_frames(self, source, target, first, count):
         if not self.is_manifest(source):
             return super().clip_frames(source, target, first, count)
+        source, info = self._info(source)
+        if (type(first) is not int or type(count) is not int
+                or first < 0 or count <= 0 or first + count > info["frames"]):
+            raise ValueError("Frame window is outside source")
+        return self._clip_window(source, target, info, first, first + count, None)[0]
+
+    def _clip_window(self, source, target, info, first, stop, region):
+        if not 0 <= first < stop <= info["frames"]:
+            raise ValueError("Clip has no native frames or exceeds the source")
         target = self._target(source, target)
-        with TemporaryDirectory(prefix="clip-input-", dir=target.parent) as scratch:
-            materialized, _ = self.materialize(source, Path(scratch) / "source.mp4")
-            return super().clip_frames(materialized, target, first, count)
+        bounds = self._rect(info, region) if region is not None else (
+            0, 0, info["width"], info["height"])
+        width, height = bounds[2] - bounds[0], bounds[3] - bounds[1]
+        count = stop - first
+        # Bound only this lossless crop, including block padding and container overhead.
+        estimate = 64 * 1024 + count * (
+            math.ceil(width / 16) * math.ceil(height / 16) * 256 * 6 + 4096)
+        limit = min(self.MAX_OUTPUT_BYTES, self.media.max_source_bytes, estimate)
+        before = file_sha(source)
+        result_info = {**info, "width": width, "height": height,
+                       "frames": count, "has_audio": False}
+
+        @contextmanager
+        def pixels():
+            with self._decoded_window(source, info, first, stop) as frames:
+                yield (image.crop(bounds) for image in frames)
+
+        with self.workspace.local_write():
+            self.workspace.preflight(target, limit)
+            with self.workspace.measure("render", source_frames=info["frames"],
+                                        eligible_frames=count, transferred_frames=count):
+                # Verify dependencies before publication, retaining every historical input.
+                with TemporaryDirectory(prefix="clip-output-", dir=target.parent) as scratch:
+                    temporary = Path(scratch) / target.name
+                    self._encode_frames(temporary, result_info, pixels(), output_limit=limit)
+                    if file_sha(source) != before:
+                        raise MediaError("Clip source changed during encoding")
+                    self._chain(source)
+                    _, result = self._info(temporary)
+                    os.replace(temporary, target)
+        return target, result
 
 
 def visual_for(executor, task):

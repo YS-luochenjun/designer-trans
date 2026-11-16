@@ -1,0 +1,52 @@
+{
+  "id": "media.fonts",
+  "version": "1.0.0",
+  "references": [
+    {
+      "family": "Douyin Sans / 抖音美好体",
+      "source": "https://github.com/bytedance/fonts",
+      "license": "OFL-1.1",
+      "use": "粗标题；官方确认内嵌剪映",
+      "language_note": "官方列6763汉字及682数字西文符号，不能推定覆盖日文假名"
+    },
+    {
+      "family": "Source Han Sans / 思源黑体",
+      "source": "https://github.com/adobe-fonts/source-han-sans",
+      "license": "OFL-1.1",
+      "use": "黑体标题、字幕，多字重",
+      "language_note": "按SC/TC/JP/KR等地域字形选择具体文件"
+    },
+    {
+      "family": "Source Han Serif / 思源宋体",
+      "source": "https://github.com/adobe-fonts/source-han-serif",
+      "license": "OFL-1.1",
+      "use": "宋体、明朝体、衬线风格",
+      "language_note": "按目标语言选择地域版本"
+    },
+    {
+      "family": "Noto CJK",
+      "source": "https://github.com/notofonts/noto-cjk",
+      "license": "OFL-1.1",
+      "use": "Sans/Serif多语言基础字体",
+      "language_note": "JP/SC/TC/HK/KR有不同字形；不等同一个通用默认"
+    },
+    {
+      "family": "LXGW WenKai / 霞鹜文楷",
+      "source": "https://github.com/lxgw/LxgwWenKai",
+      "license": "OFL-1.1",
+      "use": "手写、温柔、文案风格",
+      "language_note": "具体版本及译文需实际验字；不能由风格推断语言覆盖"
+    }
+  ],
+  "system_fonts": [
+    "C:/Windows/Fonts/msyh.ttc",
+    "C:/Windows/Fonts/msyhbd.ttc",
+    "C:/Windows/Fonts/arial.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/meiryo.ttc",
+    "C:/Windows/Fonts/malgun.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc"
+  ]
+}

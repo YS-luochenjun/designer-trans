@@ -86,58 +86,18 @@ def handoff(controller, state, summary, *, representation_target=None):
 
 
 def bound_work(controller, state, summary):
-    """An unchanged assignment has a finite work allowance, independent of phrasing."""
-    from .work_autonomy import enabled
-    from video_translation.domain.limits import testing_unlimited
-    if testing_unlimited(controller.task) or complete_candidate(controller.task) or enabled(controller.task):
+    """An unchanged assignment requests Route review without exhausting its authority."""
+    if state.get("pending_turn") is not None:
         return
-    if not authorized(controller.task) or state.get("pending_turn") is not None:
-        return
-    candidate = state.get("candidate")
-    if candidate:
-        checkpoint = state.get("candidate_review_checkpoint") or {}
-        if checkpoint.get("candidate_id") != candidate["id"]:
-            state["candidate_review_checkpoint"] = {"candidate_id": candidate["id"], "turn": state["turn"]}
-            return
-        if state["turn"] - checkpoint["turn"] < 8:
-            return
-        # Retain unjudged media without inventing a rejection or applying its pixels.
-        held = {**candidate, "review_status": "needs_human_review",
-                "review_issue": "Candidate review allowance exhausted without a verdict"}
-        archive = state.setdefault("candidate_archive", [])
-        archive[:] = [c for c in archive if c["id"] != candidate["id"]]
-        archive.append(held)
-        state["candidate"] = None
-        state.setdefault("deferred", {})[candidate["source_id"]] = {
-            "turn": state["turn"], "reason": held["review_issue"]}
-        state.pop("pipeline_review", None)
-        state.pop("archive_review", None)
-        state.setdefault("work_budget_outcomes", {})["candidate-" + candidate["id"]] = {
-            "source_id": candidate["source_id"], "base_sha256": state["base"]["sha256"],
-            "candidate_id": candidate["id"], "reason": held["review_issue"]}
     order = state.get("route_work_order") or {}
-    key = (state["base"]["sha256"], order.get("route_review"), order.get("reference_id"))
+    key = [state["base"]["sha256"], order.get("route_review"), order.get("reference_id")]
     checkpoint = state.get("autonomy_checkpoint")
-    if not checkpoint or checkpoint["key"] != list(key):
-        state["autonomy_checkpoint"] = {"key": list(key), "turn": state["turn"]}
+    if not checkpoint or checkpoint["key"] != key:
+        state["autonomy_checkpoint"] = {"key": key, "turn": state["turn"]}
         return
-    limit = controller.task["review_draft_authorization"].get("max_work_actions_per_assignment", 8)
-    if state["turn"] - checkpoint["turn"] < limit:
-        return
-    for row in summary["remaining"]:
-        if order.get("source_id") and row["source_id"] != order["source_id"]:
-            continue
-        if not row.get("actionable_intervals_ms"):
-            continue
-        state.setdefault("deferred", {})[row["source_id"]] = {
-            "turn": state["turn"],
-            "reason": "Unchanged work assignment exhausted its bounded attempt allowance; "
-                      "retain unresolved coverage and consider a different method or review draft"}
-    state["autonomy_checkpoint"]["exhausted"] = True
-    from .clean_progress import fingerprint
-    state.setdefault("work_budget_outcomes", {}).setdefault(fingerprint(key), {
-        "base_sha256": state["base"]["sha256"], "route_review": order.get("route_review"),
-        "source_id": order.get("source_id"), "method": order.get("method"),
-        "reason": "Assignment action allowance exhausted without an accepted base change",
-        "applied_turns": [h["turn"] for h in state["history"]
-                          if checkpoint["turn"] <= h["turn"] < state["turn"]]})
+    threshold = (controller.task.get("review_draft_authorization") or {}).get(
+        "max_work_actions_per_assignment", 8)
+    if state["turn"] - checkpoint["turn"] >= max(1, threshold):
+        from .clean_supervision import request
+        request(controller, state, "progress_review",
+                "Review unchanged assignment and choose a useful next method or scope", basis=key)

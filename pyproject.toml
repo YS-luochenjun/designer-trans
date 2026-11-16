@@ -19,6 +19,9 @@ video-translation = "video_translation.interfaces.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+media_capabilities = ["data/*.json"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --basetemp=runtime/tmp/pytest"

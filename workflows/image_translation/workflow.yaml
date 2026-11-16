@@ -1,0 +1,12 @@
+id: image_translation
+version: 1.0.0
+execution: ready
+executor: route_worker
+nodes:
+  - {id: prepare_images, label: 准备图片素材, stage: intake, scope: source, depends_on: []}
+  - {id: analyze_images, label: 分析图片文字与保护区, stage: observe, scope: source, depends_on: [prepare_images]}
+  - {id: background_review, label: 背景清理与审核, stage: visual, scope: source, depends_on: [analyze_images]}
+  - {id: translate_images, label: 翻译图片文字, stage: translate, scope: locale, depends_on: [analyze_images]}
+  - {id: compose_images, label: 合成图片译文, stage: visual, scope: locale, depends_on: [background_review, translate_images]}
+  - {id: image_review, label: 图片成品审核, stage: review, scope: locale, depends_on: [compose_images]}
+  - {id: deliver, label: 语言包交付, stage: deliver, scope: locale_bundle, depends_on: [image_review]}

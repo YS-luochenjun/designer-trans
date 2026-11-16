@@ -14,20 +14,33 @@
     },
     "intent": {
       "default": "discussion",
-      "enum": ["discussion", "storage", "cleanup_plan", "knowledge_summary"],
+      "enum": [
+        "discussion",
+        "storage",
+        "cleanup_plan",
+        "knowledge_summary"
+      ],
       "title": "Intent",
       "type": "string"
     },
     "task_id": {
       "anyOf": [
-        {"pattern": "^[a-fA-F0-9]{32}$", "type": "string"},
-        {"type": "null"}
+        {
+          "pattern": "^[a-fA-F0-9]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
       ],
       "default": null,
       "title": "Task Id"
     }
   },
-  "required": ["request_id", "text"],
+  "required": [
+    "request_id",
+    "text"
+  ],
   "title": "ManagerMessage",
   "type": "object",
   "$id": "urn:video-translation:workflow/manager-message:1.0.0",

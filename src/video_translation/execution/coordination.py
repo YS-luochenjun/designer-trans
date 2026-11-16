@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 
 from video_translation.application.collaboration import CoordinationReply, basis, node_for
+from video_translation.domain.limits import budget_policy, effective_limit
 from video_translation.integrations.agents import UnknownExternalResult
 from video_translation.persistence.store import now
 
@@ -28,7 +29,9 @@ target_node_id选择work_status中实际需要改动的节点；用户在审核�
 这会保存方向并在Work安全边界交接；在途请求保留原身份，不能声称已经完成修改。
 存在歧义且确需用户决定才clarify：一次问题、2到4个简短options；技术方法由Route与Work处理。
 用户已有明确要求无需再次确认。讨论不默认暂停；已有暂停、取消、未知请求和原预算仍有效。
-暂停时如实说明已转达但等待恢复；停稳的未完成节点由任务Route核证据后有界安排返工。
+budget_policy是当前执行政策，优先于历史对话和旧工单中的数字。动作数、轮数和返工数
+只触发复盘、换法及重新派工，不是停止依据；明确费用预算、用户暂停和质量门仍有效。
+暂停时如实说明已转达但等待恢复；停稳的未完成节点由任务Route核证据后安排返工。
 完成可用翻译视频需要先清底、译字/声音、合成、审核。正常观看的轻微差异可接受；
 残余可读原文、叠字和明显主体损伤不能当作完成。最终视听批准仍归用户。
 你只管理和交接，不伪称看过未提供的媒体、不直接制作、不提高额度、不自动批准。
@@ -47,6 +50,7 @@ def discuss(executor, task, message):
     packet = {
         "agent_role": "task_route",
         "instruction": ROUTE_INSTRUCTION if is_route else INSTRUCTION,
+        "budget_policy": budget_policy(task),
         "task": {key: task.get(key) for key in ("title", "notes", "target_locales", "audio_strategy",
                                                "status", "max_paid_calls", "paid_calls", "collaboration_rules")},
         "node": {key: node.get(key) for key in ("id", "label", "definition_id", "locale", "status", "error", "attempt")},
@@ -68,6 +72,8 @@ def discuss(executor, task, message):
                            "candidate_pending": bool(s.get("candidate"))}
                           for s in store.list("production_session") if s["task_id"] == task["id"]],
     }
+    packet["task"].update({key: effective_limit(task, key) for key in (
+        "max_paid_calls", "max_visual_steps", "max_revisions")})
     resource_ids = [entry["id"] for entry in executor.catalog._scoped(task, node)
                     if entry["kind"] in {"skills", "knowledge"}]
     resources = executor.catalog.consult(task, node, resource_ids)

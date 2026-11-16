@@ -1,0 +1,309 @@
+{
+  "id": "media.locales",
+  "version": "1.0.0",
+  "description": "Business locale aliases; explicit region and script tags are preserved.",
+  "entries": [
+    {
+      "locale": "en",
+      "aliases": [
+        "en",
+        "us",
+        "us2",
+        "eng",
+        "english",
+        "英语",
+        "英文"
+      ]
+    },
+    {
+      "locale": "pt",
+      "aliases": [
+        "pt",
+        "por",
+        "portuguese",
+        "portugal",
+        "br",
+        "bra",
+        "brazil",
+        "brasil",
+        "ptbr",
+        "葡萄牙语",
+        "葡语"
+      ]
+    },
+    {
+      "locale": "es",
+      "aliases": [
+        "es",
+        "esp",
+        "spanish",
+        "spain",
+        "mx",
+        "mexico",
+        "cl",
+        "co",
+        "pe",
+        "西班牙语",
+        "西语"
+      ]
+    },
+    {
+      "locale": "ja",
+      "aliases": [
+        "ja",
+        "jp",
+        "jpn",
+        "japanese",
+        "japan",
+        "日语",
+        "日文",
+        "日本語"
+      ]
+    },
+    {
+      "locale": "de",
+      "aliases": [
+        "de",
+        "deu",
+        "ger",
+        "german",
+        "germany",
+        "德语"
+      ]
+    },
+    {
+      "locale": "fr",
+      "aliases": [
+        "fr",
+        "fra",
+        "fre",
+        "french",
+        "france",
+        "法语"
+      ]
+    },
+    {
+      "locale": "it",
+      "aliases": [
+        "it",
+        "ita",
+        "italian",
+        "italy",
+        "意大利语"
+      ]
+    },
+    {
+      "locale": "id",
+      "aliases": [
+        "id",
+        "ind",
+        "indonesian",
+        "indonesia",
+        "印尼语",
+        "印度尼西亚语"
+      ]
+    },
+    {
+      "locale": "th",
+      "aliases": [
+        "th",
+        "tha",
+        "thai",
+        "thailand",
+        "泰语"
+      ]
+    },
+    {
+      "locale": "vi",
+      "aliases": [
+        "vi",
+        "vie",
+        "vietnamese",
+        "vietnam",
+        "vn",
+        "越南语"
+      ]
+    },
+    {
+      "locale": "ko",
+      "aliases": [
+        "ko",
+        "kor",
+        "korean",
+        "kr",
+        "korea",
+        "韩语"
+      ]
+    },
+    {
+      "locale": "zh",
+      "aliases": [
+        "zh",
+        "cn",
+        "chs",
+        "chinese",
+        "china",
+        "hk",
+        "中文",
+        "简体中文"
+      ]
+    },
+    {
+      "locale": "zh-TW",
+      "aliases": [
+        "zhtw",
+        "cht",
+        "traditionalchinese",
+        "tw",
+        "taiwan",
+        "繁体中文"
+      ]
+    },
+    {
+      "locale": "ru",
+      "aliases": [
+        "ru",
+        "rus",
+        "russian",
+        "russia",
+        "俄语"
+      ]
+    },
+    {
+      "locale": "tr",
+      "aliases": [
+        "tr",
+        "tur",
+        "turkish",
+        "turkey",
+        "土耳其语"
+      ]
+    },
+    {
+      "locale": "ar",
+      "aliases": [
+        "ar",
+        "ara",
+        "arabic",
+        "阿拉伯语"
+      ]
+    },
+    {
+      "locale": "hi",
+      "aliases": [
+        "hi",
+        "hin",
+        "hindi",
+        "in",
+        "india",
+        "印地语"
+      ]
+    },
+    {
+      "locale": "pl",
+      "aliases": [
+        "pl",
+        "pol",
+        "polish",
+        "poland",
+        "波兰语"
+      ]
+    },
+    {
+      "locale": "nl",
+      "aliases": [
+        "nl",
+        "dut",
+        "dutch",
+        "netherlands",
+        "荷兰语"
+      ]
+    },
+    {
+      "locale": "fi",
+      "aliases": [
+        "fi",
+        "fin",
+        "finnish",
+        "finland",
+        "芬兰语"
+      ]
+    },
+    {
+      "locale": "sv",
+      "aliases": [
+        "sv",
+        "swe",
+        "swedish",
+        "sweden",
+        "se",
+        "瑞典语"
+      ]
+    },
+    {
+      "locale": "da",
+      "aliases": [
+        "da",
+        "dan",
+        "danish",
+        "denmark",
+        "dk",
+        "丹麦语"
+      ]
+    },
+    {
+      "locale": "ms",
+      "aliases": [
+        "ms",
+        "may",
+        "malay",
+        "malaysia",
+        "马来语"
+      ]
+    },
+    {
+      "locale": "ro",
+      "aliases": [
+        "ro",
+        "ron",
+        "romanian",
+        "romania",
+        "罗马尼亚语"
+      ]
+    },
+    {
+      "locale": "bn",
+      "aliases": [
+        "bn",
+        "ben",
+        "bengali",
+        "bd",
+        "bangladesh",
+        "孟加拉语"
+      ]
+    },
+    {
+      "locale": "fil",
+      "aliases": [
+        "fil",
+        "tl",
+        "tgl",
+        "tagalog",
+        "filipino",
+        "ph",
+        "philippines",
+        "菲律宾语"
+      ]
+    },
+    {
+      "locale": "hu",
+      "aliases": [
+        "hu",
+        "hun",
+        "hungarian",
+        "hungary",
+        "匈牙利语"
+      ]
+    }
+  ]
+}

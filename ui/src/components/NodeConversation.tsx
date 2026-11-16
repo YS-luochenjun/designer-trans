@@ -67,6 +67,9 @@ export function NodeConversation({ task, node, refresh }: {
               {message.direction ? <p role="status">
                 {task.control_paused ? "方向已保存；任务暂停中，恢复后交给 Work。" :
                   message.direction.status === "received_by_work" ? "Work 已收到新方向。" :
+                  message.direction.status === "reconciling" ? "技术 Route 正在核对原请求；方向已保留，核清后重新评估下一步。" :
+                  message.direction.status === "work_queued" ? "Work 已排队，将按新方向继续。" :
+                  message.direction.status === "route_queued" ? "Route 已接管停稳节点，正在安排下一项工作。" :
                     "Route 已转达方向，等待 Work 在安全边界接收。"}
               </p> : message.applied_revision != null ? <span>旧版要求 v{message.applied_revision} 已保存 · 当时未重新安排制作</span>
                 : !terminal && message.interaction !== "route" && <button className="secondary" disabled={busy || !task.control_paused ||

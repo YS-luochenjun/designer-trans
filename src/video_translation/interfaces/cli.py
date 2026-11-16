@@ -91,8 +91,10 @@ def main():
         from video_translation.domain.production import PRODUCTION_CONTRACTS
         from video_translation.execution.adaptive_observe import ObservationDecision
         from video_translation.execution.task_route import ObservationRouteDecision
+        from video_translation.execution.image_translation import ImageCleanPlan, ImageLetteringPlan
 
         contracts = {**CONTRACTS, **PRODUCTION_CONTRACTS, "agent/observation-decision": ObservationDecision,
+                     "agent/image-clean-plan": ImageCleanPlan, "agent/image-lettering-plan": ImageLetteringPlan,
                      "agent/observation-route": ObservationRouteDecision}
         for name, model in contracts.items():
             path = settings.root / "contracts/schemas" / f"{name}.json"

@@ -7,14 +7,14 @@ from video_translation.application.tasks import Conflict
 
 
 def facts(service, task, state):
-    from video_translation.domain.limits import budget_policy, testing_unlimited
+    from video_translation.domain.limits import budget_policy
     node = next(n for n in task["nodes"] if n["id"] == state["node_id"])
     budget = task.get("execution_snapshot", {}).get("resource_budget") or {}
-    limit = None if testing_unlimited(task) else budget.get("max_clean_turns", state["turn"])
+    limit = None
     result = {
         "node_id": node["id"], "session_id": state["id"], "turn": state["turn"],
         "base": dict(state["base"]), "accepted_count": len(state.get("accepted", [])),
-        "clean_turn_limit": limit,
+        "clean_turn_limit": limit, "review_turn_threshold": budget.get("max_clean_turns"),
         "remaining_actions": None if limit is None else max(0, limit - state["turn"]),
         "budget_policy": budget_policy(task),
         "quality_passed": False, "media_dependencies_verified": False,

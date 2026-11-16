@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 from .models import Contract, Region
 from .local_repair import SurfaceRepair, TrackedDonorRepair
+from .execution import FileRef
 
 
 class MotionPoint(Contract):
@@ -50,12 +51,17 @@ class SourceLettering(Contract):
     needs_occlusion: bool = False
     occlusion: list[OcclusionFrame] = Field(default_factory=list, max_length=32)
     uncertainty: str = Field(default="", max_length=1200)
+    animation_components: list[Literal[
+        "translation", "scale", "opacity", "beat_sync", "rotation", "perspective",
+        "deformation", "per_glyph",
+    ]] = Field(default_factory=list, max_length=8)
 
 
 class SourceDesign(Contract):
     lettering: list[SourceLettering] = Field(default_factory=list, max_length=200)
     scene_boundaries_ms: list[int] = Field(default_factory=list, max_length=200)
     observations: list[str] = Field(default_factory=list, max_length=30)
+    inspection_times_ms: list[int] = Field(default_factory=list, max_length=12)
 
 
 class CleanFinding(Contract):
@@ -88,7 +94,9 @@ class CleanAction(Contract):
     process_findings: list[str] = Field(default_factory=list, max_length=5)
     source_id: str | None = None
     times_ms: list[int] = Field(default_factory=list, max_length=12)
-    method: Literal["flat", "donor", "image_edit", "wan", "local_surface", "tracked_donor", "reference_plate"] | None = None
+    method: Literal["flat", "donor", "image_edit", "wan", "local_surface", "tracked_donor", "reference_plate", "registered_patch"] | None = None
+    candidate_manifest: FileRef | None = None
+    tool_receipt: str | None = Field(default=None, min_length=1, max_length=240)
     reference_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     start_ms: int | None = Field(default=None, ge=0)
     end_ms: int | None = Field(default=None, gt=0)
@@ -131,6 +139,9 @@ class CleanAction(Contract):
             raise ValueError("Metadata inspection requires a candidate, evidence and no sample times")
         if self.action == "repair" and (not self.source_id or not self.method):
             raise ValueError("修复必须绑定文字实例及工具")
+        if self.action == "repair" and self.method == "registered_patch" and (
+                not self.candidate_manifest or not self.tool_receipt or not self.evidence):
+            raise ValueError("Native candidate requires a manifest identity, tool receipt and evidence")
         if self.action == "repair" and self.method == "reference_plate" and not self.reference_id:
             raise ValueError("Generated-reference repair requires an admitted reference ID")
         if self.action == "repair" and self.method == "local_surface" and self.surface_repair is None:
@@ -203,6 +214,10 @@ class LetteringDecision(Contract):
     candidate_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence: list[str] = Field(min_length=1, max_length=30)
     times_ms: list[int] = Field(default_factory=list, max_length=12)
+    inspection_focus: Literal[
+        "general", "entry_exit", "motion", "occlusion", "style_layout", "cleanup",
+        "temporal_continuity",
+    ] = "general"
     revisions: list[LetteringPlan] = Field(default_factory=list, max_length=50)
 
 
@@ -225,7 +240,7 @@ class CleanRouteDecision(Contract):
     reason: str = Field(min_length=1, max_length=2400)
     source_id: str | None = None
     method: Literal["flat", "donor", "local_surface", "tracked_donor", "inspect",
-                    "image_edit", "wan", "image_reference", "reference_plate"] | None = None
+                    "image_edit", "wan", "image_reference", "reference_plate", "registered_patch"] | None = None
     question: str = Field(default="", max_length=2400)
     evidence: list[str] = Field(min_length=1, max_length=20)
     remaining_assessments: list[CleanStopAssessment] = Field(default_factory=list, max_length=1000)

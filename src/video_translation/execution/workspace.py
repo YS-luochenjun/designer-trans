@@ -136,8 +136,9 @@ class ExecutionWorkspace:
             raise ValueError("Execution artifact escaped its task workspace")
         return path.resolve()
 
-    def preflight(self, output, estimated_bytes):
-        if type(estimated_bytes) is not int or estimated_bytes < 0:
+    def preflight(self, output, estimated_bytes, *, estimated_files=1):
+        if (type(estimated_bytes) is not int or estimated_bytes < 0
+                or type(estimated_files) is not int or estimated_files < 0):
             raise ValueError("Space estimate must be a nonnegative integer")
         output = self.confined(output)
         parent = output.parent
@@ -149,27 +150,10 @@ class ExecutionWorkspace:
         needed = estimated_bytes + reserve
         if available < needed:
             raise MediaError(f"Insufficient workspace space: need={needed}, free={available}")
-        inventory = None
-        if budget:
-            inventory = storage_inventory(self.root, max_files=budget.max_workspace_files + 1)
-            if self.root.parent.name == "tasks":
-                related = self.root.parent.parent / "route" / self.root.name
-                if related.exists():
-                    extra = storage_inventory(related, max_files=budget.max_workspace_files + 1)
-                    inventory = {
-                        "groups": {**inventory["groups"],
-                                   **{"route/" + key: value for key, value in extra["groups"].items()}},
-                        "files": inventory["files"] + extra["files"],
-                        "logical_bytes": inventory["logical_bytes"] + extra["logical_bytes"],
-                        "skipped": inventory["skipped"] + extra["skipped"],
-                        "truncated": inventory["truncated"] or extra["truncated"],
-                    }
-            if inventory["skipped"] or inventory["truncated"] or inventory["files"] >= budget.max_workspace_files:
-                raise MediaError("Task workspace file allowance reached or inventory is incomplete")
-            if inventory["logical_bytes"] + estimated_bytes > budget.max_workspace_bytes:
-                raise MediaError("Task workspace byte allowance reached; retain current results")
+        # Inventory remains an explicit reporting operation. Historical task sizes
+        # must not block candidate review or scan the entire task before every write.
         return {"estimated_output_bytes": estimated_bytes, "reserve_bytes": reserve,
-                "workspace_logical_bytes": inventory["logical_bytes"] if inventory else None,
+                "workspace_logical_bytes": None, "workspace_quotas_enforced": False,
                 "available_bytes": available, "reservation": False}
 
     @contextmanager

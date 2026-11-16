@@ -1,5 +1,6 @@
 import type { AgentTrace, Artifact, ProductionDecision, ProductionSession, Task, TaskNode } from "../lib/types";
 import { time } from "../lib/types";
+import { workflowLabel } from "../lib/workflowLabel";
 import { Empty, ErrorBox, JsonView, Status } from "./common";
 import { Select } from "./Select";
 
@@ -131,14 +132,14 @@ export function ProductionProcess({ task, nodeId, onNodeChange }: {
         <label>节点<Select aria-label="制作过程节点" value={nodeId} onChange={event => onNodeChange(event.target.value)}>
           <option value="">全部节点</option>
           {(task.nodes ?? []).map(node => <option key={node.id} value={node.id}>
-            {node.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")} · {node.locale ?? "原片共享"}
+            {workflowLabel(node.label)} · {node.locale ?? "原片共享"}
           </option>)}
         </Select></label>
         <span>{visible.reduce((total, group) => total + group.count, 0)} 条记录</span>
       </div>
       <div className="task-record-scroll" tabIndex={0} role="region" aria-label="制作过程记录">
       {visible.map(({ node, decisions, sessions }) => <section className="production-evidence" key={node.id}>
-        <h3>{node.label} · {node.locale ?? "原片共享"}{task.assets?.find(asset => asset.id === node.asset_id)?.name
+        <h3>{workflowLabel(node.label)} · {node.locale ?? "原片共享"}{task.assets?.find(asset => asset.id === node.asset_id)?.name
           ? ` · ${task.assets.find(asset => asset.id === node.asset_id)!.name}` : ""}</h3>
         <ProductionHistory node={node} nodeDecisions={decisions} nodeSessions={sessions} traces={task.agent_traces ?? []} />
       </section>)}

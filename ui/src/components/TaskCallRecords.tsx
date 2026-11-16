@@ -1,5 +1,6 @@
 import type { Task } from "../lib/types";
 import { time } from "../lib/types";
+import { workflowLabel } from "../lib/workflowLabel";
 import { Empty, ErrorBox, JsonView, Status } from "./common";
 import { Select } from "./Select";
 import { ChevronDown } from "lucide-react";
@@ -32,7 +33,7 @@ export function TaskCallRecords({ task, nodeId, onNodeChange }: {
         <label>节点<Select aria-label="调用记录节点" value={nodeId} onChange={event => onNodeChange(event.target.value)}>
           <option value="">全部节点</option>
           {(task.nodes ?? []).map(node => <option key={node.id} value={node.id}>
-            {node.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")} · {node.locale ?? "原片共享"}
+            {workflowLabel(node.label)} · {node.locale ?? "原片共享"}
           </option>)}
         </Select></label>
         <span>{calls.length} 条调用 · {requests.length} 条图片工具请求</span>
@@ -76,7 +77,7 @@ export function TaskCallRecords({ task, nodeId, onNodeChange }: {
               <ChevronDown size={14} className="task-call-chevron" />
               <strong>{call.provider === "agent" ? "Agent" : String(call.provider ?? "外部服务").toUpperCase()} · {kindNames[String(call.kind)] ?? String(call.kind ?? "调用")}</strong>
               <Status value={call.status === "unknown" && call.journal_state === "waiting" && call.resume_safe ? "waiting_external" : String(call.status)} />
-              <span>{node?.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "") ?? "节点未关联"} · {time(String(call.created_at ?? ""))}</span>
+              <span>{node ? workflowLabel(node.label) : "节点未关联"} · {time(String(call.created_at ?? ""))}</span>
             </summary>
             <div className="task-call-detail">
               <ErrorBox message={typeof call.error === "string" ? call.error : ""} />

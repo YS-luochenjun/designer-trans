@@ -3,6 +3,7 @@ import { ReactFlow, Background, Handle, Position, BaseEdge, MarkerType } from "@
 import type { Edge, EdgeProps, Node, NodeProps, ReactFlowInstance } from "@xyflow/react";
 import { Focus, Maximize2, Minus, Plus, ScanLine } from "lucide-react";
 import type { AgentTrace, Asset, ProductionSession, TaskNode } from "../lib/types";
+import { workflowLabel } from "../lib/workflowLabel";
 import { nodeProgress } from "./NodeOverview";
 import { cleanWorkflow } from "./cleanWorkflow";
 import { activityLabel } from "./AgentActivity";
@@ -21,7 +22,7 @@ function WorkflowNode({ data, selected }: NodeProps<DiagramNode>) {
   const node = data.node;
   const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
-  const label = node.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "");
+  const label = workflowLabel(node.label);
   return <div className={`workflow-node nodrag workflow-node--${node.status} ${selected ? "is-selected" : ""}`}
     role="button" tabIndex={0} aria-pressed={Boolean(selected)} data-node-id={node.id}
     aria-label={`查看${label} · ${data.role ?? node.locale ?? "原片共享"}`} onClick={() => {
@@ -36,8 +37,9 @@ function WorkflowNode({ data, selected }: NodeProps<DiagramNode>) {
     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); data.onSelect(node.id); } }}>
     <Handle type="target" position={Position.Top} />
     <div className="workflow-node-top"><span>{data.role ?? node.locale ?? "原片共享"}</span>
-      {node.route_state && ["failed", "interrupted", "waiting_user"].includes(node.status)
+      {node.route_state && ["failed", "interrupted", "waiting_user", "unknown"].includes(node.status)
         ? <span className="status">Route {node.route_state === "running" ? "协调中" :
+          node.route_state === "waiting_reconciliation" ? "核对原请求" :
           node.route_state === "blocked" ? "遇到阻塞" : "待处理"}</span> : <Status value={node.status} />}</div>
     <strong className="workflow-node-label" data-testid="workflow-node-label" title={label}>{label}</strong>
     <div className="workflow-node-foot" title={node.error || data.activity || node.skip_reason || ""}>
@@ -74,7 +76,7 @@ export function WorkflowGraph({ nodes, assets = [], traces = [], sessions = [], 
     if (nodes.find(node => node.id === id)?.definition_id !== "clean") return;
     onSelect(id); setInside(id);
   };
-  const assetIds = [...new Set(nodes.map((node) => node.asset_id))];
+  const assetIds = [...new Set(nodes.map((node) => node.asset_id).filter(Boolean))];
   const [assetChoice, setAssetChoice] = useState("");
   const [localeChoice, setLocaleChoice] = useState("");
   const assetId = assetIds.includes(assetChoice) ? assetChoice : assetIds[0];
@@ -85,12 +87,12 @@ export function WorkflowGraph({ nodes, assets = [], traces = [], sessions = [], 
   useEffect(() => {
     if (selectedNode) { setAssetChoice(selectedNode.asset_id); if (selectedNode.locale) setLocaleChoice(selectedNode.locale); }
   }, [selectedNode?.id, selectedNode?.asset_id, selectedNode?.locale]);
-  const visible = nodes.filter((node) => node.asset_id === assetId && (!node.locale || node.locale === locale));
+  const visible = nodes.filter((node) => (!node.asset_id || node.asset_id === assetId) && (!node.locale || node.locale === locale));
   const scope = `${assetId}:${locale}`;
   return <section className="workflow-graph" data-testid="workflow-graph" aria-label="任务流程图">
     <div className="workflow-scope">
       {parent && <button className="subflow-back" onClick={() => setInside(null)}>‹ 主流程</button>}
-      {parent ? <><strong className="workflow-source">{parent.label.replace(/^[①②③④⑤⑥⑦⑧⑨⑩]\s*/, "")}</strong><span className="workflow-progress">Work 自主选法 · 程序核验与调度 · 状态示意</span></> : <>
+      {parent ? <strong className="workflow-source">{workflowLabel(parent.label)}</strong> : <>
       {assetIds.length > 1 ? <Select aria-label="流程图原片" value={assetId} onChange={(event) => { setAssetChoice(event.target.value); onSelect(""); }}>
         {assetIds.map((id) => <option key={id} value={id}>{sourceName(id)}</option>)}
       </Select> : <span className="workflow-source" title={assetId ? sourceName(assetId) : ""}>{assetId ? sourceName(assetId) : "执行流程"}</span>}

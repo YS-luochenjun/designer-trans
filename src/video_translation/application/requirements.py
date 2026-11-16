@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
-from .tasks import Conflict, TaskService
+from .tasks import Conflict, TaskService, asset_kind
 from ..persistence.store import now
 
 
@@ -93,14 +93,17 @@ class RequirementService:
         locales = sorted(set(locales))
         if brief.get("locales") and set(brief["locales"]) != set(locales):
             raise Conflict("Brief locales differ from the explicitly selected locales")
-        if brief.get("assetType") != "video":
-            raise ValueError("Only production video requirements are supported")
+        asset_type = brief.get("assetType")
+        if asset_type not in {"video", "image"}:
+            raise ValueError("Only video and image translation requirements are supported")
         normalized_sources = []
         for item in sources:
             item = {"asset_id": item} if isinstance(item, str) else item
             if not isinstance(item, dict) or not isinstance(item.get("asset_id"), str):
                 raise ValueError("Each source needs a registered asset_id")
             asset = self.store.require("asset", item["asset_id"])
+            if asset_kind(asset) != asset_type:
+                raise ValueError("Requirement source type does not match the platform asset type")
             digest = self.tasks.hash_file(self.tasks.checked_path(asset))
             if digest != asset["sha256"] or item.get("sha256", digest) != digest:
                 raise Conflict("Registered source bytes changed")
@@ -127,7 +130,7 @@ class RequirementService:
             raise ValueError("Brief quantity must be a positive integer")
         if business["channels"] is not None and (not isinstance(business["channels"], list) or not all(isinstance(v, str) for v in business["channels"])):
             raise ValueError("Brief channels must be strings")
-        content = {"id": requirement_id, "code": code, "assetType": "video", **business,
+        content = {"id": requirement_id, "code": code, "assetType": asset_type, **business,
                    "sources": normalized_sources, "locales": locales}
         version = _digest(content)
         record = {**content, "content_version": version, "remote_updated_at": _timestamp(brief.get("updatedAt")),
@@ -194,6 +197,21 @@ class RequirementService:
                 raise Conflict("Requirement source bytes changed")
         deliveries = [json.loads(r[0]) for r in db.execute("SELECT data FROM records WHERE kind='delivery'").fetchall()]
         deliveries = [d for d in deliveries if d["task_id"] == task["id"]]
+        if requirement["assetType"] == "image":
+            from .image_delivery import reviewed_members
+            if (len(deliveries) != len(requirement["locales"])
+                    or {row["locale"] for row in deliveries} != set(requirement["locales"])):
+                raise Conflict("Every image locale needs exactly one reviewed language package")
+            result = []
+            for delivery in deliveries:
+                for member in reviewed_members(self.tasks, task, delivery, lambda k, i: _read(db, k, i)):
+                    review = next(n for n in task["nodes"] if n["definition_id"] == "image_review"
+                                  and n["asset_id"] == member["asset_id"] and n["locale"] == delivery["locale"])
+                    result.append({"delivery_id": delivery["id"] + ":" + member["asset_id"],
+                                   "asset_id": member["asset_id"], "locale": delivery["locale"],
+                                   "artifact_id": member["artifact_id"], "sha256": member["sha256"],
+                                   "review_node_id": review["id"]})
+            return sorted(result, key=lambda item: (item["asset_id"], item["locale"]))
         if len(deliveries) != len(expected) or {(d["asset_id"], d["locale"]) for d in deliveries} != expected:
             raise Conflict("Every source/locale needs exactly one reviewed delivery")
         result = []

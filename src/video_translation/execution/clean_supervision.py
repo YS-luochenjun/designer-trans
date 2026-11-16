@@ -1,6 +1,5 @@
 """Send material Work outcomes to Route without resetting work or accepting pixels."""
 from video_translation.domain.execution import identity
-from .review_draft import complete_candidate
 
 
 def ready(state, node):
@@ -11,8 +10,6 @@ def ready(state, node):
 
 
 def request(controller, state, trigger, reason, *, source_id=None, basis=None):
-    if not complete_candidate(controller.task):
-        return
     from .convergence import binding
     key = identity({**binding(controller, state), "trigger": trigger, "basis": basis})
     reports = state.setdefault("work_feedback", {})
@@ -24,7 +21,7 @@ def request(controller, state, trigger, reason, *, source_id=None, basis=None):
 
 
 def pending(controller, state):
-    if not complete_candidate(controller.task) or not ready(state, controller.node):
+    if not ready(state, controller.node):
         return []
     history = state.get("history", [])
     if (history and not state.get("candidate")
@@ -68,6 +65,9 @@ def pending(controller, state):
 
 
 def acknowledge(controller, state, reports, assigned):
+    if reports:
+        state["last_count_review_turn"] = state["turn"]
+        state.pop("completion_review_due", None)
     for report in reports:
         report["status"] = "assigned" if assigned else "concluded"
         report["route_review"] = (state.get("route_work_order") or {}).get("route_review") if assigned else None

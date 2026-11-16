@@ -12,6 +12,8 @@ import type { PendingDeletion } from "../components/TaskDeletion";
 import { Select } from "../components/Select";
 import { ModelSelection } from "../components/ModelSelection";
 import { CapabilityCards } from "../components/CapabilityCards";
+import { HomeActivity, ProjectMetrics } from "../components/ProjectMetrics";
+import { taskKinds } from "../lib/taskKinds";
 import { DeveloperView, ProjectSteward } from "./Management";
 import type {
   Delivery,
@@ -37,37 +39,28 @@ type Navigation = { onTask: (id: string) => void; onNew: () => void };
 export function Dashboard() {
   const overview = useData<Overview>("/overview", 4000);
   return (
-    <>
+    <div className="project-home">
       <PageHead
         eyebrow=""
         title="首页"
+        action={<HomeActivity overview={overview.data} />}
       />
       <ErrorBox message={overview.error} />
-      <nav className="home-summary" aria-label="项目运行摘要">
-        {[
-          ["正在制作", overview.data?.running, "#tasks"],
-          ["任务待处理", overview.data?.waiting, "#tasks"],
-          ["已交付成品", overview.data?.deliveries, "#deliveries"],
-        ].map(([label, value, href]) => (
-          <a key={String(label)} href={String(href)}>
-            <span>{label}</span>
-            <strong>{value ?? "—"}</strong>
-          </a>
-        ))}
-      </nav>
       <ProjectSteward />
-    </>
+      <ProjectMetrics />
+    </div>
   );
 }
 export function Tasks({ onTask, onNew }: Navigation) {
   const [search, setSearch] = useState(""),
     [status, setStatus] = useState(""),
+    [kind, setKind] = useState(""),
     [offset, setOffset] = useState(0);
   const [deleting, setDeleting] = useState<Pick<Task, "id" | "title"> | null>(null);
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(readPendingDeletion);
   const [deleteNotice, setDeleteNotice] = useState("");
   const { data, error, loading, reload } = useData<Page<Task>>(
-    `/tasks?q=${encodeURIComponent(search)}&status=${status}&limit=${TASK_PAGE_SIZE}&offset=${offset}`,
+    `/tasks?q=${encodeURIComponent(search)}&status=${status}&task_kind=${kind}&limit=${TASK_PAGE_SIZE}&offset=${offset}`,
     4000,
   );
   useEffect(() => {
@@ -84,7 +77,7 @@ export function Tasks({ onTask, onNew }: Navigation) {
         action={
           <button className="primary" onClick={onNew}>
             <Plus size={16} />
-            新建翻译
+            新建任务
           </button>
         }
       />
@@ -110,12 +103,19 @@ export function Tasks({ onTask, onNew }: Navigation) {
           }}
         >
           <option value="">全部状态</option>
+          <option value="draft">任务草稿</option>
           <option value="running">执行中</option>
           <option value="waiting_user">等待确认</option>
           <option value="blocked">需要处理</option>
           <option value="completed">全部完成</option>
           <option value="partial_completed">部分完成</option>
           <option value="cancelled">已取消</option>
+        </Select>
+        <Select aria-label="按任务类型筛选" value={kind} onChange={event => {
+          setKind(event.target.value); setOffset(0);
+        }}>
+          <option value="">全部类型</option>
+          {taskKinds.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}
         </Select>
         <span className="muted">{data?.total ?? "—"} 项任务</span>
       </div>
@@ -128,7 +128,7 @@ export function Tasks({ onTask, onNew }: Navigation) {
         ) : data?.items.length ? (
           <TaskList tasks={data.items} onSelect={onTask} />
         ) : (
-          <Empty title={search || status ? "没有匹配的任务" : "尚无翻译任务"}>
+          <Empty title={search || status || kind ? "没有匹配的任务" : "尚无任务"}>
             任务与状态将实时出现在这里。
           </Empty>
         )}
